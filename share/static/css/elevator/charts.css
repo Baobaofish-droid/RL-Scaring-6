@@ -1,0 +1,18 @@
+.chart-group-by fieldset legend,
+.chart-calculate fieldset legend {
+    padding: 0 1em;
+}
+
+.chart-picture input[name=Width],
+.chart-picture input[name=Height] {
+    width: 4em;
+    text-align: right;
+}
+
+.chart-wrapper .collection-as-table th {
+    text-shadow: 0 0 3px #ddd;
+}
+
+.chart-table-wrapper {
+    margin-top: .4em;
+}

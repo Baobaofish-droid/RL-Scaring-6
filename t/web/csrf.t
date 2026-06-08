@@ -1,0 +1,396 @@
+use strict;
+use warnings;
+
+use RT::Test tests => undef;
+
+my $ticket = RT::Ticket->new(RT::CurrentUser->new('root'));
+my ($ok, $msg) = $ticket->Create(Queue => 1, Owner => 'nobody', Subject => 'bad music');
+ok($ok);
+my $other = RT::Test->load_or_create_queue(Name => "Other queue", Disabled => 0);
+my $other_queue_id = $other->id;
+
+my ($baseurl, $m) = RT::Test->started_ok;
+
+my $test_page = "/Ticket/Create.html?Queue=1";
+my $test_path = "/Ticket/Create.html";
+
+ok $m->login, 'logged in';
+
+# valid referer
+$m->add_header(Referer => $baseurl);
+$m->get_ok($test_page);
+$m->content_lacks("Possible cross-site request forgery");
+$m->title_is('Create a new ticket in General');
+
+# off-site referer BUT provides auth
+$m->add_header(Referer => 'http://example.net');
+$m->get_ok("$test_page&user=root&pass=password");
+$m->content_lacks("Possible cross-site request forgery");
+$m->title_is('Create a new ticket in General');
+
+# explicitly no referer BUT provides auth
+$m->add_header(Referer => undef);
+$m->get_ok("$test_page&user=root&pass=password");
+$m->content_lacks("Possible cross-site request forgery");
+$m->title_is('Create a new ticket in General');
+
+# CSRF parameter whitelist tests
+my $searchBuildPath = '/Search/Build.html';
+
+# CSRF whitelist for /Search/Build.html param SavedSearchLoad
+$m->add_header(Referer => undef);
+$m->get_ok("$searchBuildPath?SavedSearchLoad=23");
+$m->content_lacks('Possible cross-site request forgery');
+$m->title_is('Query Builder');
+
+# CSRF pass for /Search/Build.html no param
+$m->add_header(Referer => undef);
+$m->get_ok("$searchBuildPath");
+$m->content_lacks('Possible cross-site request forgery');
+$m->title_is('Query Builder');
+
+# CSRF fail for /Search/Build.html arbitrary param only
+$m->add_header(Referer => undef);
+$m->get_ok("$searchBuildPath?foo=bar");
+$m->content_contains('Possible cross-site request forgery');
+$m->title_is('Possible cross-site request forgery');
+
+# CSRF fail for /Search/Build.html arbitrary param with SavedSearchLoad
+$m->add_header(Referer => undef);
+$m->get_ok("$searchBuildPath?SavedSearchLoad=foo&foo=bar");
+$m->content_contains('Possible cross-site request forgery');
+$m->title_is('Possible cross-site request forgery');
+
+# CSRF pass for /Search/Build.html param NewQuery
+$m->add_header(Referer => undef);
+$m->get_ok("$searchBuildPath?NewQuery=1");
+$m->content_lacks('Possible cross-site request forgery');
+$m->title_is('Query Builder');
+
+# CSRF pass for /Ticket/Update.html items in ticket action menu
+$m->add_header(Referer => undef);
+$m->get_ok('/Ticket/Update.html?id=1&Action=foo');
+$m->content_lacks('Possible cross-site request forgery');
+
+# CSRF pass for /Ticket/Update.html reply to message in ticket history
+$m->add_header(Referer => undef);
+$m->get_ok('/Ticket/Update.html?id=1&QuoteTransaction=1&Action=Reply');
+$m->content_lacks('Possible cross-site request forgery');
+
+# CSRF pass for /Articles/Article/ExtractIntoClass.html
+# Action->Extract Article on ticket menu
+$m->add_header(Referer => undef);
+$m->get_ok('/Articles/Article/ExtractIntoClass.html?Ticket=1');
+$m->content_lacks('Possible cross-site request forgery');
+
+# CSRF pass for /Views/
+$m->add_header(Referer => undef);
+$m->get_ok('/Views/Component/QueueList?From=/index.html');
+$m->content_lacks('Possible cross-site request forgery');
+
+# CSRF pass for /SelfService/Views/
+$m->add_header(Referer => undef);
+$m->get_ok('/SelfService/Views/Component/SelfServiceTopArticles?From=/SelfService/index.html');
+$m->content_lacks('Possible cross-site request forgery');
+
+# now send a referer from an attacker
+$m->add_header(Referer => 'http://example.net');
+$m->get_ok($test_page);
+$m->content_contains("Possible cross-site request forgery");
+$m->content_contains("If you really intended to visit <tt>$baseurl/Ticket/Create.html</tt>");
+$m->content_contains("the Referrer header supplied by your browser (example.net:80) is not allowed");
+$m->title_is('Possible cross-site request forgery');
+
+# Android
+$m->add_header(Referer => 'android-app://com.slack/');
+$m->get_ok($test_page);
+$m->content_contains("Possible cross-site request forgery");
+$m->content_contains("If you really intended to visit <tt>$baseurl/Ticket/Create.html</tt>");
+$m->content_contains("the Referrer header supplied by your browser (android-app://com.slack/) is not allowed");
+$m->title_is('Possible cross-site request forgery');
+
+# reinstate mech's usual header policy
+$m->delete_header('Referer');
+
+# clicking the resume request button gets us to the test page
+$m->follow_link(text_regex => qr{resume your request});
+$m->content_lacks("Possible cross-site request forgery");
+like($m->response->request->uri, qr{^http://[^/]+\Q$test_path\E\?CSRF_Token=\w+$});
+$m->title_is('Create a new ticket in General');
+
+# try a whitelisted argument from an attacker
+$m->add_header(Referer => 'http://example.net');
+$m->get_ok("/Ticket/Display.html?id=1");
+$m->content_lacks("Possible cross-site request forgery");
+$m->title_is('#1: bad music');
+
+# now a non-whitelisted argument
+$m->get_ok("/Ticket/Display.html?id=1&Action=Take");
+$m->content_contains("Possible cross-site request forgery");
+$m->content_contains("If you really intended to visit <tt>$baseurl/Ticket/Display.html</tt>");
+$m->content_contains("the Referrer header supplied by your browser (example.net:80) is not allowed");
+$m->title_is('Possible cross-site request forgery');
+
+$m->delete_header('Referer');
+$m->follow_link(text_regex => qr{resume your request});
+$m->content_lacks("Possible cross-site request forgery");
+like($m->response->request->uri, qr{^http://[^/]+\Q/Ticket/Display.html});
+$m->title_is('#1: bad music');
+$m->content_contains('Owner changed from Nobody to root');
+
+# force mech to never set referer
+$m->add_header(Referer => undef);
+$m->get_ok($test_page);
+$m->content_contains("Possible cross-site request forgery");
+$m->content_contains("If you really intended to visit <tt>$baseurl/Ticket/Create.html</tt>");
+$m->content_contains("your browser did not supply a Referrer header");
+$m->title_is('Possible cross-site request forgery');
+
+$m->follow_link(text_regex => qr{resume your request});
+$m->content_lacks("Possible cross-site request forgery");
+is($m->response->redirects, 0, "no redirection");
+like($m->response->request->uri, qr{^http://[^/]+\Q$test_path\E\?CSRF_Token=\w+$});
+$m->title_is('Create a new ticket in General');
+
+# try sending the wrong csrf token, then the right one
+$m->add_header(Referer => undef);
+$m->get_ok($test_page);
+$m->content_contains("Possible cross-site request forgery");
+$m->content_contains("If you really intended to visit <tt>$baseurl/Ticket/Create.html</tt>");
+$m->content_contains("your browser did not supply a Referrer header");
+$m->title_is('Possible cross-site request forgery');
+
+# Sending a wrong CSRF is just a normal request.  We'll make a request
+# with just an invalid token, which means no Queue=x so default queue used
+my $link = $m->find_link(text_regex => qr{resume your request});
+(my $broken_url = $link->url) =~ s/(CSRF_Token)=\w+/$1=crud/;
+$m->get($broken_url);
+$m->content_like(qr/Create\sa\snew\sticket\sin\sGeneral/);
+$m->title_is('Create a new ticket in General');
+
+# The token doesn't work for other pages, or other arguments to the same page.
+$m->add_header(Referer => undef);
+$m->get_ok($test_page);
+$m->content_contains("Possible cross-site request forgery");
+my ($token) = $m->content =~ m{CSRF_Token=(\w+)};
+
+$m->add_header(Referer => undef);
+$m->get_ok("/Admin/Queues/Modify.html?id=new&Name=test&CSRF_Token=$token");
+$m->content_contains("Possible cross-site request forgery");
+$m->content_contains("If you really intended to visit <tt>$baseurl/Admin/Queues/Modify.html</tt>");
+$m->content_contains("your browser did not supply a Referrer header");
+$m->title_is('Possible cross-site request forgery');
+
+$m->follow_link(text_regex => qr{resume your request});
+$m->content_lacks("Possible cross-site request forgery");
+$m->title_is('Configuration for queue test');
+
+# Try the same page, but different query parameters, which are blatted by the token
+$m->get_ok("/Ticket/Create.html?Queue=$other_queue_id&CSRF_Token=$token");
+$m->content_lacks("Possible cross-site request forgery");
+$m->title_is('Create a new ticket in General');
+is($m->form_name('TicketCreate')->value('Queue'), 1, 'Queue selection dropdown populated and pre-selected');
+
+# Ensure that file uploads work across the interstitial
+$m->delete_header('Referer');
+$m->get_ok($test_page);
+$m->content_contains("Create a new ticket in General", 'ticket create page');
+$m->form_name('TicketCreate');
+$m->field('Subject', 'Attachments test');
+
+my $logofile = "$RT::StaticPath/images/bpslogo.png";
+open LOGO, "<", $logofile or die "Can't open logo file: $!";
+binmode LOGO;
+my $logo_contents = do {local $/; <LOGO>};
+close LOGO;
+$m->field('Attach',  $logofile);
+
+# Lose the referer before the POST
+$m->add_header(Referer => undef);
+$m->click('SubmitTicket');
+$m->content_contains("Possible cross-site request forgery");
+$m->content_contains("If you really intended to visit <tt>$baseurl/Ticket/Create.html</tt>");
+$m->follow_link(text_regex => qr{resume your request});
+ok( $m->find_link( text => 'bpslogo.png', url_regex => qr{Attachment/} ), 'page has the file link' );
+$m->follow_link_ok( { url_regex => qr/Attachment\/\d+\/\d+\/bpslogo\.png/ } );
+is($m->content, $logo_contents, "Binary content matches");
+
+
+# now try self-service with CSRF
+my $user = RT::User->new(RT->SystemUser);
+$user->Create(Name => "SelfService", Password => "chops", Privileged => 0);
+
+$m = RT::Test::Web->new;
+$m->get_ok("$baseurl/index.html?user=SelfService&pass=chops");
+$m->title_is("Open tickets", "got self-service interface");
+$m->content_contains("My open tickets", "got self-service interface");
+
+# post without referer
+$m->add_header(Referer => undef);
+$m->get_ok("/SelfService/Create.html?Queue=1");
+$m->content_contains("Possible cross-site request forgery");
+$m->content_contains("If you really intended to visit <tt>$baseurl/SelfService/Create.html</tt>");
+$m->content_contains("your browser did not supply a Referrer header");
+$m->title_is('Possible cross-site request forgery');
+
+$m->follow_link(text_regex => qr{resume your request});
+$m->content_lacks("Possible cross-site request forgery");
+is($m->response->redirects, 0, "no redirection");
+like($m->response->request->uri, qr{^http://[^/]+\Q/SelfService/Create.html\E\?CSRF_Token=\w+$});
+$m->title_is('Create a ticket in #1');
+
+# Test ReferrerWhitelist configuration options
+RT::Test->stop_server;
+
+diag "ReferrerWhitelist: exact hostname:port match";
+{
+    RT->Config->Set( ReferrerWhitelist => qw(www.example.com:443) );
+    ($baseurl, $m) = RT::Test->started_ok;
+    ok $m->login, 'logged in';
+
+    # exact match should be allowed
+    $m->add_header(Referer => 'https://www.example.com:443/page');
+    $m->get_ok($test_page);
+    $m->content_lacks("Possible cross-site request forgery", "exact hostname:port match allowed");
+
+    # different port should be rejected
+    $m->add_header(Referer => 'https://www.example.com:80/page');
+    $m->get_ok($test_page);
+    $m->content_contains("Possible cross-site request forgery", "different port rejected");
+
+    # different host should be rejected
+    $m->add_header(Referer => 'https://other.example.com:443/page');
+    $m->get_ok($test_page);
+    $m->content_contains("Possible cross-site request forgery", "different host rejected");
+
+    RT::Test->stop_server;
+}
+
+diag "ReferrerWhitelist: wildcard prefix (*.example.com:80)";
+{
+    RT->Config->Set( ReferrerWhitelist => qw(*.example.com:80) );
+    ($baseurl, $m) = RT::Test->started_ok;
+    ok $m->login, 'logged in';
+
+    # foo.example.com:80 should match
+    $m->add_header(Referer => 'http://foo.example.com:80/page');
+    $m->get_ok($test_page);
+    $m->content_lacks("Possible cross-site request forgery", "*.example.com:80 matches foo.example.com:80");
+
+    # example.com:80 should NOT match (no subdomain)
+    $m->add_header(Referer => 'http://example.com:80/page');
+    $m->get_ok($test_page);
+    $m->content_contains("Possible cross-site request forgery", "*.example.com:80 does not match example.com:80");
+
+    # foo.bar.example.com:80 should NOT match (multi-level subdomain)
+    $m->add_header(Referer => 'http://foo.bar.example.com:80/page');
+    $m->get_ok($test_page);
+    $m->content_contains("Possible cross-site request forgery", "*.example.com:80 does not match foo.bar.example.com:80");
+
+    RT::Test->stop_server;
+}
+
+diag "ReferrerWhitelist: wildcard suffix (www*.example.com:80)";
+{
+    RT->Config->Set( ReferrerWhitelist => qw(www*.example.com:80) );
+    ($baseurl, $m) = RT::Test->started_ok;
+    ok $m->login, 'logged in';
+
+    # www3.example.com:80 should match
+    $m->add_header(Referer => 'http://www3.example.com:80/page');
+    $m->get_ok($test_page);
+    $m->content_lacks("Possible cross-site request forgery", "www*.example.com:80 matches www3.example.com:80");
+
+    # www-test.example.com:80 should match
+    $m->add_header(Referer => 'http://www-test.example.com:80/page');
+    $m->get_ok($test_page);
+    $m->content_lacks("Possible cross-site request forgery", "www*.example.com:80 matches www-test.example.com:80");
+
+    # www.example.com:80 should match
+    $m->add_header(Referer => 'http://www.example.com:80/page');
+    $m->get_ok($test_page);
+    $m->content_lacks("Possible cross-site request forgery", "www*.example.com:80 matches www.example.com:80");
+
+    # other.example.com:80 should NOT match
+    $m->add_header(Referer => 'http://other.example.com:80/page');
+    $m->get_ok($test_page);
+    $m->content_contains("Possible cross-site request forgery", "www*.example.com:80 does not match other.example.com:80");
+
+    RT::Test->stop_server;
+}
+
+diag "ReferrerWhitelist: full URI with scheme (android-app://*)";
+{
+    RT->Config->Set( ReferrerWhitelist => qw(android-app://*) );
+    ($baseurl, $m) = RT::Test->started_ok;
+    ok $m->login, 'logged in';
+
+    # android-app://com.slack/ should match
+    $m->add_header(Referer => 'android-app://com.slack/');
+    $m->get_ok($test_page);
+    $m->content_lacks("Possible cross-site request forgery", "android-app://* matches android-app://com.slack/");
+
+    # android-app://com.google.android.gm/ should match
+    $m->add_header(Referer => 'android-app://com.google.android.gm/');
+    $m->get_ok($test_page);
+    $m->content_lacks("Possible cross-site request forgery", "android-app://* matches android-app://com.google.android.gm/");
+
+    # http referrer should NOT match (different scheme)
+    $m->add_header(Referer => 'http://android-app.example.com/');
+    $m->get_ok($test_page);
+    $m->content_contains("Possible cross-site request forgery", "android-app://* does not match http:// referrer");
+
+    RT::Test->stop_server;
+}
+
+diag "ReferrerWhitelist: specific android-app URI";
+{
+    RT->Config->Set( ReferrerWhitelist => qw(android-app://com.slack/) );
+    ($baseurl, $m) = RT::Test->started_ok;
+    ok $m->login, 'logged in';
+
+    # android-app://com.slack/ should match
+    $m->add_header(Referer => 'android-app://com.slack/');
+    $m->get_ok($test_page);
+    $m->content_lacks("Possible cross-site request forgery", "specific android-app URI matches");
+
+    # android-app://com.other/ should NOT match
+    $m->add_header(Referer => 'android-app://com.other/');
+    $m->get_ok($test_page);
+    $m->content_contains("Possible cross-site request forgery", "different android-app URI rejected");
+}
+
+diag "CSRF token is consumed after first use";
+{
+    RT::Test->stop_server;
+    ( $baseurl, $m ) = RT::Test->started_ok;
+    ok $m->login, 'logged in';
+
+    # Trigger interstitial -- stores a token with Queue=1 in the saved args
+    $m->add_header( Referer => undef );
+    $m->get_ok($test_page);
+    $m->content_contains("Possible cross-site request forgery");
+
+    my $link = $m->find_link( text_regex => qr{resume your request} );
+    my ($token) = $link->url =~ /CSRF_Token=(\w+)/;
+
+    # First use: follow the resume link -- token consumed, stored args restored
+    $m->delete_header('Referer');
+    $m->follow_link( text_regex => qr{resume your request} );
+    $m->content_lacks( "Possible cross-site request forgery", 'token accepted on first use' );
+    $m->title_is('Create a new ticket in General');
+    is $m->form_name('TicketCreate')->value('Queue'), 1, 'first use restores stored Queue=1 arg';
+
+    # Second use: same token, different Queue in URL, valid referer so the page loads.
+    # Since the token is consumed, the stored args (Queue=1) must NOT be replayed;
+    # the Queue from the URL ($other_queue_id) should be used instead.
+    $m->add_header( Referer => $baseurl );
+    $m->get_ok("/Ticket/Create.html?Queue=$other_queue_id&CSRF_Token=$token");
+    $m->content_lacks( "Possible cross-site request forgery", 'page loads on second use (valid referer)' );
+    $m->title_is('Create a new ticket in Other queue');
+    is $m->form_name('TicketCreate')->value('Queue'), $other_queue_id,
+        'second use does not restore stored Queue arg -- token is gone';
+    $m->delete_header('Referer');
+}
+
+done_testing;

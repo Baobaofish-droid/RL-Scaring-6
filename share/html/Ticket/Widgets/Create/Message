@@ -1,0 +1,185 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+% my $Title = loc("Create a new ticket in [_1]", $m->scomp("/Ticket/Elements/ShowQueue", QueueObj => $QueueObj, Escape => 0));
+% $m->callback( %ARGS, CallbackName => 'BeforeWidget', ARGSRef => \%ARGS, TitleRef => \$Title );
+<&| /Widgets/TitleBox, title => $Title, QueueObj => $QueueObj, class => 'messagedetails' &>
+
+% if ( $ARGS{ShowPeople} // 1 ) {
+<&| /Elements/LabeledValue, Label => loc("Requestors"), LabelFor => 'Requestors' &>
+  <& /Elements/EmailInput,
+      Name => 'Requestors',
+      Default => $ARGS{Requestors} // $session{CurrentUser}->EmailAddress,
+      AutocompleteMultiple => 1,
+      AutocompleteType => 'Principals', &>
+  <div class="form-check">
+    <input class="checkbox form-check-input" type="checkbox" name="SkipNotification" id="SkipNotification-Requestors" value="Requestors" <% (grep $_ eq 'Requestors', @SkipNotification)? 'checked': '' %> />
+    <label class="form-check-label" for="SkipNotification-Requestors"><&|/l, loc('Requestors')&>Do not send email to [_1] on create</&></label>
+  </div>
+% $m->callback( CallbackName => 'AfterRequestors', QueueObj => $QueueObj, ARGSRef => \%ARGS );
+</&>
+
+<&| /Elements/LabeledValue,
+      Label => loc("Cc"),
+      LabelFor => 'Cc',
+      LabelTooltip => loc('Sends a copy of this update to the provided users or groups. These people will receive future updates.'),
+&>
+  <& /Elements/EmailInput,
+      Name => 'Cc',
+      Default => $ARGS{Cc},
+      AutocompleteMultiple => 1,
+      AutocompleteType => 'Principals', &>
+  <div class="form-check">
+    <input class="checkbox form-check-input" type="checkbox" name="SkipNotification" id="SkipNotification-Cc" value="Cc" <% (grep $_ eq 'Cc', @SkipNotification)? 'checked': '' %> />
+    <label class="form-check-label" for="SkipNotification-Cc"><&|/l, loc('Cc')&>Do not send email to [_1] on create</&></label>
+  </div>
+</&>
+
+<&| /Elements/LabeledValue,
+      Label => loc("Admin Cc"),
+      LabelFor => 'AdminCc',
+      LabelTooltip => loc('Sends a copy of this update to the provided users or groups. These people will receive future updates.'),
+&>
+  <& /Elements/EmailInput,
+      Name => 'AdminCc',
+      Default => $ARGS{AdminCc},
+      AutocompleteMultiple => 1,
+      AutocompleteType => 'Principals', &>
+  <div class="form-check">
+    <input class="checkbox form-check-input" type="checkbox" name="SkipNotification" id="SkipNotification-AdminCc" value="AdminCc" <% (grep $_ eq 'AdminCc', @SkipNotification)? 'checked': '' %> />
+    <label class="form-check-label" for="SkipNotification-AdminCc"><&|/l, loc('Admin Cc')&>Do not send email to [_1] on create</&></label>
+  </div>
+</&>
+
+% my $roles = $QueueObj->CustomRoles;
+% $roles->LimitToMultipleValue;
+% if ( @HiddenRoles ) {
+%     $roles->Limit(
+%         FIELD => 'Name',
+%         OPERATOR => 'NOT IN',
+%         VALUE => \@HiddenRoles,
+%         ENTRYAGGREGATOR => 'AND',
+%     );
+% }
+
+% $m->callback( CallbackName => 'ModifyCustomRoles', ARGSRef => \%ARGS, CustomRoles => $roles );
+% while (my $role = $roles->Next) {
+  <&| /Elements/LabeledValue,
+      Label => $role->Name,
+      LabelFor => $role->GroupType,
+      LabelTooltip => $role->EntryHint,
+  &>
+    <& /Elements/MultiUserRoleInput, role => $role, Default => $ARGS{$role->GroupType} &>
+    <div class="form-check">
+      <input class="checkbox form-check-input" type="checkbox" name="SkipNotification" id="SkipNotification-<% $role->GroupType %>" value="<% $role->GroupType %>" <% (grep $_ eq $role->GroupType, @SkipNotification)? 'checked': '' %> />
+      <label class="form-check-label" for="SkipNotification-<% $role->GroupType %>"><&|/l&>Do not send email to this role on create</&></label>
+    </div>
+  </&>
+% }
+
+  <& /Elements/EditCustomFields,
+    %ARGS,
+    Object => RT::Ticket->new($session{CurrentUser}),
+    CategoryObj => $QueueObj,
+    CustomFields => $QueueObj->TicketCustomFields,
+    Grouping => 'People',
+    InTable => 1,
+    ForCreation => 1,
+  &>
+
+% }
+  <&| /Elements/LabeledValue, Label => loc("Subject"), LabelFor => 'Subject' &>
+      <input id="Subject" class="form-control" type="text" name="Subject" maxsize="200" value="<%$ARGS{Subject} || ''%>" />
+% $m->callback( %ARGS, CallbackName => 'AfterSubject' );
+  </&>
+
+% if ( $gnupg_widget ) {
+  <& /Elements/Crypt/SignEncryptWidget, self => $gnupg_widget, QueueObj => $QueueObj &>
+% }
+% if ( RT->Config->Get('ArticleOnTicketCreate')) {
+  <& /Articles/Elements/BeforeMessageBox, %ARGS, QueueObj => $QueueObj &>
+
+%# If user includes an article, it usually means the content changes.
+% if ( $ARGS{IncludeArticleId} ) {
+  <input type="hidden" class="hidden" name="ChangedField" value="Content" />
+% }
+
+% }
+
+% $m->callback( %ARGS, QueueObj => $QueueObj, CallbackName => 'BeforeMessageBox' );
+% if (exists $ARGS{Content}) {
+  <& /Elements/MessageBox, QueueObj => $QueueObj, Default => $ARGS{Content}, IncludeSignature => 0, IncludeDefaultArticle => 0, FullWidth => 1 &>
+% } elsif ( $ARGS{QuoteTransaction} ) {
+  <& /Elements/MessageBox, QueueObj => $QueueObj, QuoteTransaction => $ARGS{QuoteTransaction}, IncludeDefaultArticle => 0, FullWidth => 1 &>
+% } else {
+  <& /Elements/MessageBox, QueueObj => $QueueObj, IncludeDefaultArticle => 1, FullWidth => 1 &>
+%}
+% $m->callback( %ARGS, QueueObj => $QueueObj, CallbackName => 'AfterMessageBox' );
+
+% if ( $AddAttachments ) {
+  <& /Ticket/Elements/AddAttachments, %ARGS, QueueObj => $QueueObj, FullWidth => 1 &>
+% }
+  <& /Widgets/Spinner &>
+</&>
+
+% $m->callback( %ARGS, CallbackName => 'AfterWidget' );
+
+<%INIT>
+my $gnupg_widget = $m->comp( '/Elements/Crypt/SignEncryptWidget:new', Arguments => \%ARGS );
+$m->comp(
+    '/Elements/Crypt/SignEncryptWidget:Process',
+    self     => $gnupg_widget,
+    QueueObj => $QueueObj,
+);
+</%INIT>
+
+<%ARGS>
+$QueueObj
+@SkipNotification => ()
+$AddAttachments => 1
+@HiddenRoles => ()
+</%ARGS>

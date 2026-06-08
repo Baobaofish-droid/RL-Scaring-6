@@ -1,0 +1,197 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Admin/Elements/Header, Title => $title &>
+<& /Elements/Tabs &>
+<& /Elements/ListActions, actions => \@results &>
+
+<form method="post" action="DefaultValues.html" name="ModifyDefaultValues" id="ModifyDefaultValues" class="mx-auto max-width-lg">
+<input type="hidden" name="id" value="<% $queue->id %>" />
+
+<div class="ticket-info-basics">
+  <&| /Widgets/TitleBox, title => loc('Basics'), content_class => 'mx-auto width-sm' &>
+
+  <&| /Elements/LabeledValue, Label => loc('Priority') &>
+    <& /Elements/SelectPriority, Name => "InitialPriority", Default => $queue->DefaultValue('InitialPriority'), QueueObj => $queue &>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('Final Priority') &>
+      <& /Elements/SelectPriority, Name => "FinalPriority", Default => $queue->DefaultValue('FinalPriority'), QueueObj => $queue &>
+      <span><em><&|/l&>requires running rt-crontool</&></em></span>
+  </&>
+
+  <& /Elements/EditCustomFields,
+      Object => RT::Ticket->new($session{CurrentUser}),
+      CustomFields => $queue->TicketCustomFields->LimitToDefaultValuesSupportedTypes,
+      Grouping => 'Basics',
+      CategoryObj => $queue,
+  &>
+
+  <&| /Elements/LabeledValue, Label => loc('Article') &>
+      <& /Elements/SelectArticle, QueueObj => $queue, Default => $queue->DefaultValue('Article'), Name => 'Article' &>
+  </&>
+
+  </&>
+</div>
+
+<div class="ticket-info-dates">
+  <&|/Widgets/TitleBox, title => loc("Dates"), content_class => 'mx-auto width-sm' &>
+  <&| /Elements/LabeledValue, Label => loc('Starts') &>
+    <& /Elements/SelectDate, Name => "Starts", Default => $queue->DefaultValue('Starts') || '' &>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('Due') &>
+      <& /Elements/SelectDate, Name => "Due", Default => $queue->DefaultValue('Due') || '' &>
+  </&>
+
+  <& /Elements/EditCustomFields,
+      Object => RT::Ticket->new($session{CurrentUser}),
+      CustomFields => $queue->TicketCustomFields->LimitToDefaultValuesSupportedTypes,
+      Grouping => 'Dates',
+      CategoryObj => $queue,
+  &>
+  </&>
+</div>
+
+% if ( RT->Config->ObjectHasCustomFieldGrouping(Object => RT::Ticket->new($session{CurrentUser}), CategoryObj => $queue, Grouping => 'People') ) {
+<div class="ticket-info-people">
+  <&|/Widgets/TitleBox, title => loc("People"), content_class => 'mx-auto width-sm' &>
+  <& /Elements/EditCustomFields,
+      Object => RT::Ticket->new($session{CurrentUser}),
+      CustomFields => $queue->TicketCustomFields->LimitToDefaultValuesSupportedTypes,
+      Grouping => 'People',
+      CategoryObj => $queue,
+  &>
+  </&>
+</div>
+% }
+
+% if ( RT->Config->ObjectHasCustomFieldGrouping(Object => RT::Ticket->new($session{CurrentUser}), CategoryObj => $queue, Grouping => 'Links') ) {
+<div class="ticket-info-links">
+  <&|/Widgets/TitleBox, title => loc("Links"), content_class => 'mx-auto width-sm' &>
+  <& /Elements/EditCustomFields,
+      Object => RT::Ticket->new($session{CurrentUser}),
+      CustomFields => $queue->TicketCustomFields->LimitToDefaultValuesSupportedTypes,
+      Grouping => 'Links',
+      CategoryObj => $queue,
+  &>
+  </&>
+</div>
+% }
+
+<& /Elements/EditCustomFieldCustomGroupings,
+    CustomFieldGenerator => sub { $queue->TicketCustomFields->LimitToDefaultValuesSupportedTypes },
+    Object => RT::Ticket->new($session{CurrentUser}),
+    Groupings => \@groupings,
+    CategoryObj => $queue,
+&>
+
+<div class="ticket-info-cfs">
+  <&|/Widgets/TitleBox, title => loc("Transaction Custom Fields"), content_class => 'mx-auto width-sm' &>
+  <& /Elements/EditCustomFields, CustomFields => $queue->TicketTransactionCustomFields->LimitToDefaultValuesSupportedTypes, Object => RT::Transaction->new($session{CurrentUser}), QueueObj => $queue, &>
+  </&>
+</div>
+
+<& /Elements/Submit, Name => 'Update', Label => loc('Save Changes'), FullWidth => 1 &>
+<& /Elements/Submit, Name => 'Reset', Label => loc('Reset Custom Field Values to Default'), FullWidth => 1 &>
+
+</form>
+
+<%INIT>
+my $queue = RT::Queue->new( $session{CurrentUser} );
+$queue->Load($id) || Abort( loc( "Couldn't load object [_1]", $id ) );
+
+my $title = loc( 'Default Values for queue [_1]', $queue->Name );
+my @groupings = (RT::CustomField->CustomGroupings('RT::Ticket', $queue->Name), '');
+
+$m->callback( CallbackName => 'Init', ARGSRef => \%ARGS, Queue => $queue, Title => \$title, Groupings => \@groupings );
+
+my @results;
+if ( $ARGS{Reset} ) {
+    my $attr = $queue->FirstAttribute( 'CustomFieldDefaultValues' );
+    if ( $attr ) {
+        $attr->Delete;
+        push @results, "Custom Field default values are reset";
+    }
+}
+elsif ( $ARGS{Update} ) {
+    for my $field ( qw/InitialPriority FinalPriority Starts Due Article/ ) {
+        my ($ret, $msg) = $queue->SetDefaultValue(
+            Name => $field,
+            Value => $ARGS{$field},
+        );
+        push @results, $msg;
+    }
+    my $cf_args = _ParseObjectCustomFieldArgs( \%ARGS );
+    for my $cfs ( map { $cf_args->{$_}{0} || () } qw/RT::Ticket RT::Transaction/ ) {
+        for my $cf_id ( keys %$cfs ) {
+            # In the case of inconsistent CFV submission,
+            # we'll get the 1st grouping in the hash, alphabetically
+            my ( $ret, $grouping_name ) = _ValidateConsistentCustomFieldValues( $cf_id, $cfs->{$cf_id} );
+
+            my $grouping = $cfs->{$cf_id}{$grouping_name};
+            my $value    = $grouping->{Value} // $grouping->{Values};
+
+            my $cf = RT::CustomField->new( $session{CurrentUser} );
+            $cf->Load($cf_id);
+            if ( $cf->id && $cf->SupportDefaultValues ) {
+                my ( $ret, $msg ) = $cf->SetDefaultValues(
+                    Object => $queue,
+                    Values => $value,
+                );
+                push @results, $msg;
+            }
+        }
+    }
+}
+
+MaybeRedirectForResults(
+    Actions   => \@results,
+    Arguments => { id => $queue->id },
+);
+</%INIT>
+<%ARGS>
+$id => undef
+</%ARGS>

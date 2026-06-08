@@ -1,0 +1,206 @@
+=head1 NAME
+
+Full text indexing in RT
+
+=head1 LIMITATIONS
+
+While all of the below solutions can search for Unicode characters, they
+are not otherwise Unicode aware, and do no case folding, normalization,
+or the like.  That is, a string that contains C<U+0065 LATIN SMALL
+LETTER E> followed by C<U+0301 COMBINING ACUTE ACCENT> will not match a
+search for C<U+00E9 LATIN SMALL LETTER E WITH ACUTE>.  They also only
+know how to tokenize C<latin-1>-ish languages where words are separated
+by whitespace or similar characters; as such, support for searching for
+Japanese and Chinese content is extremely limited.
+
+=head1 POSTGRESQL
+
+=head2 Creating and configuring the index
+
+PostgreSQL 8.3 and above support full-text searching natively; to set up
+the required C<ts_vector> column, and create either a C<GiN> or C<GiST>
+index on it, run:
+
+    /opt/rt6/sbin/rt-setup-fulltext-index
+
+If you have a non-standard database administrator username or password,
+you may need to pass the C<--dba> or C<--dba-password> options:
+
+    /opt/rt6/sbin/rt-setup-fulltext-index --dba postgres --dba-password secret
+
+This will then tokenize and index all existing attachments in your
+database; it may take quite a while if your database already has a large
+number of tickets in it.
+
+Finally, it will output an appropriate C<%FullTextSearch> configuration
+to add to your F<RT_SiteConfig.pm>; you will need to restart your
+webserver after making these changes.
+
+
+=head2 Updating the index
+
+To keep the index up-to-date, you will need to run:
+
+    /opt/rt6/sbin/rt-fulltext-indexer
+
+...at regular intervals.  By default, this will only tokenize up to 200
+tickets at a time; you can adjust this upwards by passing C<--limit
+500>.  Larger batch sizes will take longer and consume more memory.
+
+If there is already an instance of C<rt-fulltext-indexer> running, new
+ones will exit with the message "rt-fulltext-indexer is already running".
+You can suppress this message and other output to C<STDERR> using the
+C<--quiet> option; this is particularly useful when running the command via
+C<cron>:
+
+    /opt/rt6/sbin/rt-fulltext-indexer --quiet
+
+=head1 MYSQL and MariaDB
+
+RT supports native full-text search on MySQL and MariaDB.
+
+=head2 Native MySQL and MariaDB
+
+As RT marks attachment data as C<BINARY>, MySQL and MariaDB cannot
+index this content without creating an additional table.  To create
+the required table (which is InnoDB on versions of MySQL and MariaDB
+which support it), run:
+
+    /opt/rt6/sbin/rt-setup-fulltext-index
+
+If you have a non-standard database administrator username or password,
+you may need to pass the C<--dba> or C<--dba-password> options:
+
+    /opt/rt6/sbin/rt-setup-fulltext-index --dba root --dba-password secret
+
+This will then tokenize and index all existing attachments in your
+database; it may take quite a while if your database already has a large
+number of tickets in it.
+
+Finally, it will output an appropriate C<%FullTextSearch> configuration
+to add to your F<RT_SiteConfig.pm>; you will need to restart your
+webserver after making these changes.
+
+
+=head3 Updating the index
+
+To keep the index up-to-date, you will need to run:
+
+    /opt/rt6/sbin/rt-fulltext-indexer
+
+...at regular intervals.  By default, this will only tokenize up to 200
+tickets at a time; you can adjust this upwards by passing C<--limit
+500>.  Larger batch sizes will take longer and consume more memory.
+
+If there is already an instance of C<rt-fulltext-indexer> running, new
+ones will exit with the message "rt-fulltext-indexer is already running".
+You can suppress this message and other output to C<STDERR> using the
+C<--quiet> option; this is particularly useful when running the command via
+C<cron>:
+
+    /opt/rt6/sbin/rt-fulltext-indexer --quiet
+
+=head3 Caveats
+
+Searching is done in "boolean mode."  As such, the TicketSQL query
+C<Content LIKE 'winter 2014'> will return tickets with transactions that
+contain I<either> word.  To find transactions which contain both (but
+not necessarily adjacent), use C<Content LIKE '+winter +2014'>.  To find
+transactions containing the precise phrase, use C<Content LIKE '"winter
+2014">.
+
+See the MySQL documentation, at
+L<http://dev.mysql.com/doc/refman/5.6/en/fulltext-boolean.html>, for a
+list of the full capabilities.
+
+
+=head1 ORACLE
+
+=head2 Creating and configuring the index
+
+Oracle supports full-text indexing natively using the Oracle Text
+package.  Once Oracle Text is installed and configured, run:
+
+    /opt/rt6/sbin/rt-setup-fulltext-index
+
+If you have a non-standard database administrator username or password,
+you may need to pass the C<--dba> or C<--dba-password> options:
+
+    /opt/rt6/sbin/rt-setup-fulltext-index --dba sysdba --dba-password secret
+
+This will create an Oracle CONTEXT index on the Content column in the
+Attachments table, as well as several preferences, functions and
+triggers to support this index.  The script will also output an
+appropriate C<%FullTextSearch> configuration to add to your
+F<RT_SiteConfig>.
+
+On some Oracle versions(like 23c), the dba user like C<system> might not be
+able to grant C<CTXSYS.CTX_DDL> to RT user, if you see a warning like:
+
+    DBD::Oracle::db do failed: ORA-00942: table or view does not exist
+    Help: https://docs.oracle.com/error-help/db/ora-00942/
+    (DBD ERROR: error possibly near <*> indicator at char 24
+    in 'GRANT EXECUTE ON CTXSYS.<*>CTX_DDL TO rt_user'
+
+To get around it, you can grant it using C<sys> user instead, e.g.
+
+    connect sys/password as sysdba;
+    GRANT EXECUTE ON CTXSYS.CTX_DDL TO rt_user;
+
+=head2 Updating the index
+
+To update the index, you will need to run the following at regular
+intervals:
+
+    /opt/rt6/sbin/rt-fulltext-indexer
+
+This, in effect, simply runs:
+
+    begin
+    ctx_ddl.sync_index('rt_fts_index', '2M');
+    ctx_ddl.sync_index('rt_fts_cf_index', '2M');
+    end;
+
+The amount of memory used for the sync can be controlled with the
+C<--memory> option:
+
+    /opt/rt6/sbin/rt-fulltext-indexer --memory 10M
+
+If there is already an instance of C<rt-fulltext-indexer> running, new
+ones will exit with the message "rt-fulltext-indexer is already running".
+You can suppress this message and other output to C<STDERR> using the
+C<--quiet> option; this is particularly useful when running the command via
+C<cron>:
+
+    /opt/rt6/sbin/rt-fulltext-indexer --quiet
+
+Instead of being run via C<cron>, this may instead be run via a
+DBMS_JOB; read the B<Managing DML Operations for a CONTEXT Index>
+chapter of Oracle's B<Text Application Developer's Guide> for details
+how to keep the index optimized, perform garbage collection, and other
+tasks.
+
+=head1 UNINDEXED SEARCH
+
+It is also possible to enable full-text search without database indexing
+support, simply by setting the C<Enable> key of the C<%FullTextSearch>
+option to 1, while leaving C<Indexed> set to 0:
+
+    Set(%FullTextSearch,
+        Enable  => 1,
+        Indexed => 0,
+    );
+
+This is not generally suggested, as unindexed full-text searching can
+cause severe performance problems.
+
+Custom field values are not supported in this mode.
+
+=head1 LIMIT ATTACHMENT SIZE
+
+On some systems, very large attachments can cause memory and other
+performance issues for the indexer making it unable to complete
+indexing. See L<RT_Config.pm/"$MaxFulltextAttachmentSize"> for
+details on setting a maximum attachment size to index.
+
+=cut

@@ -1,0 +1,154 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Admin/Elements/Header, Title => loc("Modify scrip #[_1]", $id) &>
+<& /Elements/Tabs &>
+<& /Elements/ListActions, actions => \@results &>
+
+<form method="post" action="Modify.html" id="ModifyScrip" name="ModifyScrip" class="mx-auto max-width-md">
+<input type="hidden" class="hidden" name="id" value="<% $id %>" />
+<input type="hidden" class="hidden" name="From" value="<% $From || q{} %>" />
+
+<&| /Widgets/TitleBox, title => loc('Basics'), &>
+<div class="row justify-content-center">
+  <div class="col-10">
+<& Elements/EditBasics, %ARGS, Scrip => $scrip &>
+
+% if ( not $disabled ) {
+  <div class="row mt-2">
+    <div class="col-auto">
+      <a href="Objects.html?id=<% $id %>"><&|/l, $scrip->FriendlyLookupType &>Applies to [_1]</&></a>
+    </div>
+    <div class="col-auto">
+% if ( $scrip->IsGlobal ) {
+<a href="<% RT->Config->Get('WebPath') %>/Admin/Global/Scrips.html?LookupType=<% $scrip->LookupType %>"</a><% loc('Global') %></a>
+% } else {
+% my $added_to = $scrip->AddedTo;
+% my $found = 0;
+% my $type = $scrip->RecordClassFromLookupType()->RecordType;
+% my $path = $type eq 'Queue' ? "${type}s" : ( $type eq 'Catalog' ? "Assets/${type}s" : "Articles/${type}es" );
+
+% while ( my $item = $added_to->Next ) {
+% $m->out(', ') if $found++;
+<a href="<% RT->Config->Get('WebPath') %>/Admin/<% $path %>/Scrips.html?id=<% $item->id %>">\
+<% $item->Name %></a>\
+% last if $found == 10;
+% }
+% $m->out(', ...') if $found == 10;
+% }
+    </div>
+  </div>
+% }
+
+<input type="hidden" class="hidden" name="SetEnabled" value="1" />
+
+  <&| /Elements/LabeledValue, Label => '' &>
+    <div class="form-check">
+      <input type="checkbox" class="checkbox form-check-input" name="Enabled" id="Enabled" value="1" <% $EnabledChecked |n%> />
+      <label class="form-check-label" for="Enabled"><&|/l&>Enabled (Unchecking this box disables this scrip)</&></label>
+    </div>
+  </&>
+  </div>
+</div>
+</&>
+
+
+  <& /Elements/Submit, Label => loc('Save Changes'), Name => 'Update', Reset => 1, FullWidth => 1 &>
+
+
+% if ($session{CurrentUser}->HasRight(Object => $RT::System, Right => 'ExecuteCode')) {
+<& Elements/EditCustomCode, %ARGS, Scrip => $scrip &>
+
+  <& /Elements/Submit, Label => loc('Save Changes'), Name => 'Update', Reset => 1, FullWidth => 1 &>
+% }
+
+</form>
+<%ARGS>
+$id     => undef
+$Update => undef
+$From   => undef
+</%ARGS>
+<%INIT>
+my $scrip = RT::Scrip->new( $session{'CurrentUser'} );
+$scrip->Load( $id );
+Abort(loc("Couldn't load scrip #[_1]", $id))
+    unless $scrip->id;
+
+my $disabled = $scrip->Disabled;
+
+if ( $Update ) {
+    my @attribs = qw(
+        Description
+        ScripAction ScripCondition
+        CustomPrepareCode CustomCommitCode CustomIsApplicableCode
+    );
+    push @attribs, "Template" if defined $ARGS{Template} and length $ARGS{Template};
+    if ($ARGS{"SetEnabled"}) {
+        push @attribs, "Disabled";
+        $ARGS{"Disabled"} = not $ARGS{"Enabled"};
+    }
+    my @results = UpdateRecordObject(
+        AttributesRef   => \@attribs,
+        Object          => $scrip,
+        ARGSRef         => \%ARGS
+    );
+    MaybeRedirectForResults(
+        Actions   => \@results,
+        Arguments => {
+            id => $scrip->id,
+            From => $From,
+        },
+    );
+}
+
+my $EnabledChecked = qq[checked="checked"];
+$EnabledChecked = '' if $disabled;
+
+my @results;
+my ($ok, $msg) = $scrip->CompileCheck;
+push @results, $msg if !$ok;
+</%INIT>

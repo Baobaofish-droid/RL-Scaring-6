@@ -1,0 +1,154 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+% $r->content_type('application/json; charset=utf-8');
+<% JSON( { actions => \@results } ) |n %>
+% $m->abort;
+
+<%ARGS>
+$id
+</%ARGS>
+
+<%INIT>
+my @results;
+
+my $asset = LoadAsset($id);
+
+# fill ACL cache
+$asset->CurrentUser->PrincipalObj->HasRights( Object => $asset );
+
+my $old_layout = GetPageLayout( Object => $asset, Page => 'Display' );
+
+my @events;
+$m->callback(
+    CallbackName => 'ProcessArguments',
+    Asset        => $asset,
+    ARGSRef      => \%ARGS,
+    results      => \@results,            # Backwards compatibility
+    Actions      => \@results,
+    Events       => \@events,
+);
+
+my $checks_failure;
+my ( $status, @msg ) = $m->comp(
+    '/Elements/ValidateCustomFields',
+    CustomFields => $asset->CustomFields,
+    Object => $asset,
+    ARGSRef => \%ARGS,
+);
+
+unless ( $status ) {
+    push @results, @msg;
+    $checks_failure = 1;
+}
+
+if ( !$checks_failure ) {
+    my @people_changes = ProcessAssetRoleMembers( $asset => %ARGS );
+    my @links_changes  = ProcessRecordLinks( RecordObj => $asset, ARGSRef => \%ARGS );
+    my @cfs_changes    = ProcessObjectCustomFieldUpdates( Object => $asset, ARGSRef => \%ARGS );
+
+    push @events, 'assetPeopleChanged'       if @people_changes;
+    push @events, 'assetLinksChanged'        if @links_changes;
+    push @events, 'assetCustomFieldsChanged' if @cfs_changes;
+
+    push @results, @people_changes, @links_changes, @cfs_changes;
+    push @results,
+        UpdateRecordObject(
+            Object        => $asset,
+            AttributesRef => [ $asset->WritableAttributes ],
+            ARGSRef       => \%ARGS
+        );
+
+    $m->callback(
+        CallbackName => 'AfterProcessArguments',
+        Asset        => $asset,
+        ARGSRef      => \%ARGS,
+        Actions      => \@results,
+        Events       => \@events,
+    );
+
+    for my $txn ( @{ $asset->{_TransactionBatch} || [] } ) {
+        if ( $txn->Type eq 'Set' ) {
+            push @events, 'asset' . $txn->Field . 'Changed';
+            if ( $txn->Field eq 'Catalog' ) {
+                push @events, 'mainContainerChanged';
+            }
+            elsif ( $txn->Field =~ /^(Name|Status|Description)$/ ) {
+                push @events, 'assetBasicsChanged';
+            }
+        }
+        elsif ( $txn->Type eq 'Status' ) {
+            push @events, 'assetStatusChanged', 'assetBasicsChanged';
+        }
+        elsif ( $txn->Type eq 'CustomField' ) {
+            push @events, 'customField-' . $txn->Field . 'Changed';
+        }
+    }
+
+    if ( ( RT::Interface::Web::RequestENV('HTTP_HX_CURRENT_URL') // '' ) =~ m{/Asset/Display.html}
+        && $old_layout ne GetPageLayout( Object => $asset, Page => 'Display' ) )
+    {
+        push @events, 'mainContainerChanged';
+    }
+}
+
+my %page_menu_events = ( 'assetStatusChanged' => 1 );
+push @events, 'pageMenuChanged' if grep { $page_menu_events{$_} } @events;
+
+$r->headers_out->{'HX-Trigger'} = JSON(
+    {
+        actionsChanged => { messages => \@results, isWarning => $checks_failure },
+        $checks_failure
+        ? ( validationFailed => [ GetInvalidFields( Object => $asset ) ] )
+        : ( requestSucceeded => 1, @results ? ( collectionsChanged => { class => 'RT::Asset', id => $asset->Id } ) : () ),
+        map { $_ => '' } @events
+    },
+    ascii => 1,
+);
+
+Abort( loc("Validation error"), Code => HTTP::Status::HTTP_UNPROCESSABLE_CONTENT ) if $checks_failure;
+</%INIT>

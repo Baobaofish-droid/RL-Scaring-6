@@ -1,0 +1,101 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<&| /Elements/LabeledValue, Label => loc('Name') &>
+  <input class="form-control" type="text" name="Name" value="<%($ARGS{'id'} eq 'new' ? '' : $ArticleObj->Name) || $ARGS{'Name'} || ''|h%>" size="50" />
+</&>
+<&| /Elements/LabeledValue, Label => loc('Type') &>
+    <select class="form-select selectpicker" name="Type">
+% foreach my $type ( qw( Content Links ) ) {
+      <option value="<% $type %>" <% ( $ArticleObj->Type // 'Content' ) eq $type ? 'selected="selected"' : ''  %>><% loc($type) %></option>
+% }
+    </select>
+</&>
+<&| /Elements/LabeledValue, Label => loc('Summary') &>
+  <input class="form-control" type="text" name="Summary" value="<%($ARGS{'id'} eq 'new' ? '' : $ArticleObj->Summary) || $ARGS{'Summary'} ||'' |h%>" size="50" />
+</&>
+<&| /Elements/LabeledValue, Label => loc('Sort Order') &>
+  <input class="form-control" type="text" name="SortOrder" value="<%($ARGS{'id'} eq 'new' ? '0' : $ArticleObj->SortOrder) || $ARGS{'SortOrder'} || '0' %>" size="50" />
+</&>
+<&| /Elements/LabeledValue, Label => loc('Class') &>
+% if ($EditClass) {
+<& /Articles/Elements/SelectClass, Name => 'Class', Default => $DefaultClass || $ArticleObj->ClassObj->Id, ShowAllClasses => 0, ShowNullOption => 0, $ArticleObj->Id ? () : ( AutoSubmit => 1 ), &>
+% } else {
+<span class="current-value form-control"><%$ClassObj->Name%></span>
+<input type="hidden" name="Class" value="<%$ClassObj->Id%>" />
+% }
+</&>
+
+% if ($ARGS{'id'} ne 'new') {
+  <&| /Elements/LabeledValue, Label => loc('Creator'), ValueSpanClass => 'current-value from-control' &>
+    <& /Elements/ShowUser, User => $ArticleObj->CreatorObj &>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('Created'), ValueSpanClass => 'current-value from-control' &>
+    <%$ArticleObj->CreatedObj->AsString%>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('Updated'), ValueSpanClass => 'current-value from-control' &>
+    <%$ArticleObj->LastUpdatedObj->AsString%>
+  </&>
+% }
+% if ($ARGS{'id'} eq 'new' || $ArticleObj->CurrentUserHasRight('DisableArticle')) {
+  <&| /Elements/LabeledValue, Label => '' &>
+
+    <input type="hidden" class="hidden" name="SetEnabled" value="1" />
+    <div class="form-check">
+      <input type="checkbox" id="Enabled" name="Enabled" class="form-check-input" value="1" <% ( $ArticleObj->id && $ArticleObj->Disabled || $ARGS{'Disabled'} ) ? '' : 'checked="checked"' |n %> />
+      <label class="form-check-label" for="Enabled"><&|/l&>Enabled (Unchecking this box disables this article)</&></label>
+    </div>
+  </&>
+% }
+<%INIT>
+</%INIT>
+<%ARGS>
+$EditClass => 1
+$DefaultClass => undef
+$ClassObj => undef
+$ArticleObj => undef
+</%ARGS>

@@ -1,0 +1,204 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Admin/Elements/Header, Title => loc("Reports menu") &>
+<& /Elements/Tabs &>
+
+<& /Elements/ListActions, actions => \@actions &>
+
+<form method="post" name="UpdateSearches" class="mx-auto max-width-lg" action="">
+  <& /Widgets/SearchSelection,
+    pane_name => { dashboard => loc('Dashboards in menu') },
+    sections  => [{
+                    id    => 'dashboards',
+                    label => loc("Dashboards"),
+                    items => \@dashboard_components,
+                }],
+    selected  => \%selected,
+    filters   => [],
+  &>
+  <input type="hidden" name="dashboard_id" value="DashboardsInMenu">
+
+  <& /Elements/Submit, Name => "UpdateSearches", Label => loc('Save') &>
+</form>
+
+<form method="post" name="UpdateSearches" class="mx-auto max-width-lg" action="">
+  <& /Widgets/SearchSelection,
+    pane_name => { report => loc('Reports in menu') },
+    sections  => [{
+                  id    => 'reports',
+                  label => loc("Reports"),
+                  items => \@report_components,
+              }],
+    selected  => \%selected,
+    filters   => [],
+  &>
+  <input type="hidden" name="dashboard_id" value="ReportsInMenu">
+
+  <& /Elements/Submit, Name => "UpdateSearches", Label => loc('Save') &>
+</form>
+
+<%init>
+my @actions;
+my $title = loc("Customize").' '.loc("reports menu");
+my $sys = RT::System->new( $session{'CurrentUser'} );
+
+my $has_right = $session{'CurrentUser'}->HasRight( Object=> $RT::System, Right => 'SuperUser');
+
+my @dashboard_components = map {{ type => 'dashboard', id => $_->id, name => $_->Name, label => $_->Name }} $m->comp("/Dashboards/Elements/ListOfDashboards");
+my @report_components = map { { %$_, name => $_->{'title'}, type => 'report', label => loc( $_->{'title'} ) } } @{ ListOfReports() };
+
+my ($dashboard_attr) = $sys->Attributes->Named('DashboardsInMenu');
+my ($reports_attr) = RT::System->new( RT->SystemUser )->Attributes->Named('ReportsInMenu');
+
+if ($ARGS{UpdateSearches}) {
+    if ( !$has_right ) {
+        push @actions, loc('Permission Denied');
+    }
+    else {
+        if ( $ARGS{'dashboard_id'} eq 'DashboardsInMenu' ) {
+            my @dashboard_ids;
+
+            my $dashboards = ref $ARGS{'dashboard'} eq 'ARRAY' ? $ARGS{'dashboard'} : [$ARGS{'dashboard'}];
+            foreach my $id ( @{$dashboards} ) {
+                next unless $id;
+                $id =~ s/dashboard-//;
+
+                my $dashboard = RT::Dashboard->new( $session{'CurrentUser'} );
+
+                my ($ret, $msg) = $dashboard->Load($id);
+                if ( $ret ) {
+                    push @dashboard_ids, $dashboard->Id;
+                }
+                else {
+                    RT::Logger->error( "Could not load dashboard: $msg" );
+                    push @actions, "Could not load dashboard $id";
+                }
+            }
+            my ( $ok, $msg );
+            if ( $dashboard_attr ) {
+                ( $ok, $msg ) = $dashboard_attr->SetContent({ dashboards => \@dashboard_ids });
+            }
+            else {
+                $dashboard_attr = RT::Attribute->new($RT::SystemUser);
+                ( $ok, $msg ) = $dashboard_attr->Create(
+                    Name    => 'DashboardsInMenu',
+                    Object  => $sys,
+                    Content => { 'dashboards' => \@dashboard_ids },
+                );
+            }
+            push @actions, $ok ? loc('Global dashboards in menu saved.') : $msg;
+            RT::Interface::Web::Session::Delete(
+                Key => 'dashboards_in_menu',
+            );
+        }
+        else {
+          my $report_names = ref $ARGS{'report'} eq 'ARRAY' ? $ARGS{'report'} : [$ARGS{'report'}];
+          my @ret;
+          if ( $report_names->[0] ) {
+              foreach my $report ( @$report_names ) {
+                  foreach my $report_component ( @report_components ) {
+                      if ( $report eq "report-".$report_component->{'id'} ) {
+                          push @ret, $report_component;
+                          last;
+                      }
+                  }
+              }
+          }
+          my ( $ok, $msg );
+          if ( $reports_attr ) {
+              ( $ok, $msg ) = $reports_attr->SetContent( \@ret );
+          }
+          else {
+              $reports_attr = RT::Attribute->new($RT::SystemUser);
+              ( $ok, $msg ) = $reports_attr->Create(
+                  Name    => 'ReportsInMenu',
+                  Object  => $sys,
+                  Content => { 'reports' => \@ret },
+              );
+          }
+          push @actions, $ok ? loc('Preferences saved for reports in menu.') : $msg;
+          RT::Interface::Web::Session::Delete(
+              Key => 'reports_in_menu',
+          );
+        }
+    }
+}
+
+my %selected;
+
+my $default_dashboards_in_menu =
+    $dashboard_attr && $dashboard_attr->Content
+  ? $dashboard_attr->Content
+  : { dashboards => [] };
+
+# prefs returns an array of Dashboard ID's
+my $selected_dashboard_ids = $default_dashboards_in_menu->{'dashboards'} || [];
+
+my @selected_dashboards;
+foreach my $id ( @{$selected_dashboard_ids} ) {
+    my $dashboard = RT::Dashboard->new( RT->SystemUser );
+    my ($ret, $msg) = $dashboard->Load( $id );
+    unless ( $ret ) {
+        RT::Logger->error( "Could not load dashboard: $id" );
+        next;
+    }
+
+    push @selected_dashboards, {
+      id      => $id,
+      name    => $dashboard->Name,
+      label   => $dashboard->Name,
+      type    => 'dashboard'
+    };
+}
+$selected{'dashboard'} = \@selected_dashboards;
+
+my $report_pref = $reports_attr ? $reports_attr->Content : [];
+
+my @report_pref_sanitized = map { { %$_, name => $_->{'title'}, type => 'report', label => loc( $_->{'title'} ) } } @{ $report_pref };
+$selected{'report'} = \@report_pref_sanitized || [];
+</%init>

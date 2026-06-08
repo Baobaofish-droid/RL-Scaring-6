@@ -1,0 +1,468 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Elements/Header, Title => $title &>
+<& /Elements/Tabs &>
+<& /Elements/ListActions, actions => \@results &>
+
+<form method="post" action="Edit.html" name="EditArticle" id="EditArticle" enctype="multipart/form-data">
+<input type="hidden" name="id" value="<%$id%>" />
+<input type="hidden" name="ClassChanged" value="0" />
+
+<&| /Widgets/TitleBox, title => $title, class => 'article-basics', &>
+<& Elements/EditBasics, ArticleObj => $ArticleObj,
+                        EditClass => 1,
+                        DefaultClass => $DefaultClass,
+                        ClassObj => $ClassObj,
+                        %ARGS ,
+                        id => $id,
+                        &>
+</&>
+
+% my $content_title = 'Content' . ( $content_type eq 'Links' ? ' - Links' : '' );
+<&| /Widgets/TitleBox, title => $content_title, class => 'article-content', &>
+<div id="article-type-content" class="<% $content_type eq 'Content' ? '' : 'hidden' %>">
+<& Elements/EditCustomFields, ArticleObj => $ArticleObj,
+                              CFContent => \%CFContent,
+                              ClassObj => $ClassObj,
+                              ClassChanged => $ARGS{ClassChanged},
+                              %ARGS,
+                              id => $id,
+                              ForCreation => ($id eq 'new'),
+                              &>
+</div>
+<div id="article-type-links" data-link-count="<% scalar @content_links %>" class="<% $content_type eq 'Links' ? '' : 'hidden' %>">
+<div class="row">
+  <div class="col-4 rt-label">
+    <span class="rt-label text-body-secondary "><% loc('Title') %></span>
+  </div>
+  <div class="col-4 rt-label">
+    <span class="rt-label text-body-secondary "><% loc('Link') %></span>
+  </div>
+  <div class="col-4 rt-label">
+    <span class="rt-label text-body-secondary "><% loc('Description') %></span>
+  </div>
+</div>
+% my $number = 1;
+% foreach my $link ( @content_links ) {
+<div class="row" data-link-number="<% $number %>">
+%   foreach my $field ( qw( title link description ) ) {
+  <div class="col-4 mb-1">
+    <input class="form-control" type="text" name="article-link-<% $field %>-<% $number %>" value="<% $link->{$field} %>" />
+  </div>
+%   }
+</div>
+%   $number++;
+% }
+</div>
+</&>
+
+<&| /Widgets/TitleBox, title => 'Links', class => 'article-links', &>
+<& Elements/EditLinks, ArticleObj => $ArticleObj,
+                       %ARGS,
+                        id => $id
+                       &>
+</&>
+
+<&| /Widgets/TitleBox, title => 'Topics', class => 'article-topics', &>
+<& Elements/EditTopics, ArticleObj => $ArticleObj,
+                        Classes => [$ArticleObj->Id ? $ArticleObj->ClassObj : $ClassObj],
+                        OnlyThisClass => 1,
+                        %ARGS,
+                        id => $id
+                        &>
+</&>
+
+
+<& /Elements/Submit, Label => ($id eq 'new' ? loc('Create') : loc('Save Changes')), color => "#993333", FullWidth => 1 &>
+</form>
+
+<%INIT>
+my $MIN_CONTENT_LINK_ROWS = 3;
+
+if ( exists $ARGS{'Topics'} ) {
+    $ARGS{'Topics'} =
+      ref( $ARGS{'Topics'} ) ? $ARGS{'Topics'} : [ $ARGS{'Topics'} ];
+}
+
+my @results;
+my $title;
+
+my $Entries    = {};
+my $ArticleObj = RT::Article->new( $session{'CurrentUser'} );
+my $ClassObj   = RT::Class->new( $session{'CurrentUser'} );
+my $DefaultClass;
+
+if ($Class) {
+    $ClassObj->Load($Class);
+    Abort(loc("'[_1]' isn't a valid class", $Class)) unless $ClassObj->Id;
+    $DefaultClass = $ClassObj->Id;
+}
+
+# If we don't have a class, default to the first class that user can
+# see and in which user can create articles
+if (!$DefaultClass) {
+    my $Classes = RT::Classes->new($session{'CurrentUser'});
+    $Classes->LimitToEnabled();
+    while (my $class = $Classes->Next) {
+        next unless ($class->Name);
+        $DefaultClass = $class->Id;
+        $ClassObj = $class;
+        last;
+    }
+}
+
+my %create_args;
+my %CFContent;
+
+if ( $ARGS{SetEnabled} ) {
+    $ARGS{Disabled} = $ARGS{Enabled} ? 0 : 1;
+}
+
+my $sortorder_ok = 1;
+if ($ARGS{SortOrder}) {
+    if ($ARGS{SortOrder} !~ /^-?\d+$/) {
+        push @results, (0, loc('Sort Order must be an integer'));
+        $sortorder_ok = 0;
+    }
+}
+
+# check if this is a Links type article being created/updated
+my @content_links;
+if ( $id && $Class && ( ( $ARGS{Type} || '' ) eq 'Links' ) ) {
+    # determine the content cf
+    my $content_cf;
+    my $CustomFields = $ClassObj->ArticleCustomFields();
+    while ( my $cf = $CustomFields->Next ) {
+        if ( $cf->Name eq 'Content' ) {
+            $content_cf = $cf;
+            last;
+        }
+    }
+    if ( $content_cf ) {
+        # this is a page submit
+        # check if we have content links in ARGS
+        my @links;
+        foreach my $arg ( keys %ARGS ) {
+            if ( $arg =~ /^article-link-(\w+)-(\d+)$/ ) {
+                my $field = $1;
+                my $index = $2 - 1;
+
+                my $link        = $links[$index] || {};
+                $link->{$field} = $ARGS{$arg};
+                $links[$index]  = $link;
+            }
+        }
+        @links = grep { $_->{title} && $_->{link} } @links;
+
+        my $content = '<ul class="list-group list-group-compact">';
+        if ( @links ) {
+            @content_links = @links;
+            foreach my $link ( @links ) {
+                next
+                    unless $link->{title} && $link->{link};
+
+                $content .= '<li class="list-group-item"><div class="article-links-link"><a href="'
+                    . $m->interp->apply_escapes( $link->{link}, 'h' )
+                    . '" class="fw-bold">'
+                    . $m->interp->apply_escapes( $link->{title}, 'h' )
+                    . '</a></div>';
+                if ( $link->{description} ) {
+                    $content .= '<div class="article-links-desc text-muted small ms-3">'
+                        . $m->interp->apply_escapes( $link->{description}, 'h' )
+                        . '</div>';
+                }
+                $content .= '</li>';
+            }
+        }
+        $content .= '</ul>';
+        my $arg = 'Object-RT::Article-'
+            . ( $id eq 'new' ? '' : $id )
+            . '-CustomField-'
+            . $content_cf->Id
+            . '-Values';
+        $ARGS{$arg} = $content;
+    }
+    else {
+        push @results, loc(q{Articles of type 'Links' must have a 'Content' custom field});
+        $ARGS{Type} = 'Content';
+        RT->Logger->error("No Content custom field for article with type Links for class: $Class");
+    }
+}
+
+if ( !$id ) {
+    $title = loc('Create a new article');
+    foreach my $arg ( sort keys %ARGS ) {
+        if ( $arg =~ /^Transaction-(\d+)$/ and $ARGS{$arg} ) {
+            my $trans = RT::Transaction->new( $session{'CurrentUser'} );
+            $trans->Load($1);
+            my $cf_id = $ARGS{$arg};
+            my $cf = RT::CustomField->new( $session{'CurrentUser'} );
+            $cf->LoadById( $cf_id );
+            if ($CFContent{$cf_id}) {
+                if ($cf->Type eq 'HTML') {
+                    $CFContent{$cf_id} .= "<br /><br />";
+                }
+                else {
+                    $CFContent{$cf_id} .= "\n\n";
+                }
+            }
+            $CFContent{$cf_id} .= $trans->Content( ($cf->Type eq 'HTML') ? (Type => 'text/html') : () );
+        }
+    }
+    $id        = 'new';
+}
+elsif ( $id eq 'new' ) {
+
+    if ( $ARGS{'RefersTo-new'} ) {
+        @{ $create_args{'RefersTo-new'} } =
+          split( /\s+/, $ARGS{'RefersTo-new'} );
+    }
+
+    if ( $ARGS{'new-RefersTo'} ) {
+        @{ $create_args{'new-RefersTo'} } =
+          split( /\s+/, $ARGS{'new-RefersTo'} );
+    }
+
+    my %cfs;
+    if (!$ARGS{ClassChanged}) {
+        if ($sortorder_ok) {
+            %cfs = ProcessObjectCustomFieldUpdatesForCreate(
+                ARGSRef         => \%ARGS,
+                ContextObject   => $ClassObj,
+                );
+
+            my $msg;
+            ( $id, $msg ) = $ArticleObj->Create(
+                Summary => $ARGS{'Summary'},
+                Name    => $ARGS{'Name'},
+                Type    => $ARGS{'Type'},
+                SortOrder => $ARGS{'SortOrder'},
+                Class   => $ARGS{'Class'},
+                Topics  => $ARGS{'Topics'},
+                Disabled => $ARGS{'Disabled'},
+                %create_args,
+                %cfs
+                );
+            push( @results, $msg );
+        } else {
+            $id = 0;
+        }
+    } else {
+        $id = 0;
+    }
+
+    if ($id) {
+        $ArticleObj->Load($id);
+
+        $title = loc( 'Modify article #[_1]', $ArticleObj->Id );
+        delete $ARGS{id};
+
+        MaybeRedirectForResults(
+            Actions   => \@results,
+            Arguments => { id => $ArticleObj->id },
+        );
+    }
+    else {
+        $ArticleObj = RT::Article->new( $session{'CurrentUser'} );
+        $id        = 'new';
+        $title     = loc('Create a new article');
+    }
+}
+else {
+
+    $ArticleObj->Load($id);
+    unless ( $ArticleObj->id ) {
+        $m->comp( "/Elements/Error",
+                  Why => loc("Unable to load article") );
+    }
+
+    # If it was a real submit, make changes.
+    # If it was just a reload to change the Class, don't make changes.
+    if (!$ARGS{ClassChanged}) {
+        my @attribs = qw(Name Type Summary Class Disabled SortOrder);
+
+        if ($sortorder_ok) {
+            push @results, UpdateRecordObject(
+                AttributesRef => \@attribs,
+                Object        => $ArticleObj,
+                ARGSRef       => \%ARGS
+                );
+        }
+
+        my @cf_results = ProcessObjectCustomFieldUpdates(
+            Object  => $ArticleObj,
+            ARGSRef => \%ARGS
+            );
+
+        # change update message for links type update to Content
+        if ( @content_links ) {
+            @cf_results = map { /^Content \<ul/ ? loc('Content links updated') : $_ } @cf_results;
+        }
+
+        @results = ( @results, @cf_results );
+
+        # Delete links that are gone gone gone.
+        foreach my $arg ( keys %ARGS ) {
+            if ( $arg =~ /DeleteLink-(.*?)-(RefersTo|MemberOf|RefersTo)-(.*)$/ ) {
+                my $base   = $1;
+                my $type   = $2;
+                my $target = $3;
+
+                my ( $val, $msg ) = $ArticleObj->DeleteLink(
+                    Base   => $base,
+                    Type   => $type,
+                    Target => $target
+                    );
+
+                push @results, $msg;
+
+            }
+
+        }
+
+        my @linktypes = qw(DependsOn MemberOf RefersTo );
+
+        foreach my $linktype (@linktypes) {
+
+            for my $luri ( split( / /, ( $ARGS{ $ArticleObj->Id . "-$linktype" } || '' )) ) {
+                $luri =~ s/\s*$//;    # Strip trailing whitespace
+                my ( $val, $msg ) =
+                    $ArticleObj->AddLink( Target => $luri, Type => $linktype );
+                push @results, $msg;
+                delete $ARGS{ $ArticleObj->Id . "-$linktype" } if $val;
+            }
+
+            for my $luri ( split( / /, ( $ARGS{ "$linktype-" . $ArticleObj->Id } || '' )) ) {
+                my ( $val, $msg ) =
+                    $ArticleObj->AddLink( Base => $luri, Type => $linktype );
+                push @results, $msg;
+                delete $ARGS{ "$linktype-" . $ArticleObj->Id } if $val;
+            }
+
+        }
+
+        my %topics;
+        if ( $ARGS{'EditTopics'} ) {
+            $topics{$_}++ for @{ $ARGS{'Topics'} };
+            my $objTopics =
+                RT::ObjectTopics->new( $session{'CurrentUser'} );
+            $objTopics->LimitToObject($ArticleObj);
+            while ( my $t = $objTopics->Next ) {
+                $topics{ $t->Topic }--;
+            }
+            for my $id ( keys %topics ) {
+                if ( $topics{$id} > 0 ) {
+                    my ( $val, $msg ) = $ArticleObj->AddTopic( Topic => $id );
+                    push @results, $msg;
+                }
+                elsif ( $topics{$id} < 0 ) {
+                    my ( $val, $msg ) = $ArticleObj->DeleteTopic( Topic => $id );
+                    push @results, $msg;
+                }
+            }
+        }
+    }
+
+    if ( ( $ArticleObj->Type eq 'Links' ) && !@content_links ) {
+        # load Content CF and parse for links
+        if ( my $content = $ArticleObj->FirstCustomFieldValue('Content') ) {
+            my $tree;
+            eval { $tree = HTML::Gumbo->new->parse( $content, format => 'tree' ); };
+            RT->Logger->error( "HTML::Gumbo parse content links as tree for article $id failed: $@" )
+                if $@;
+            if ( $tree ) {
+                foreach my $link ( $tree->look_down( sub { $_[0]->tag eq 'li' } ) ) {
+                    my ( $link_div, $desc_div ) = $link->content_list;
+                    my ( $title, $url, $desc );
+                    foreach my $element ( $link_div->content_list ) {
+                        if ( $element->tag eq 'a' ) {
+                            $url       = $element->attr('href');
+                            ( $title ) = $element->content_list;
+                        }
+                    }
+                    ( $desc ) = $desc_div->content_list
+                        if $desc_div;
+                    push @content_links, {
+                        title       => $title || '',
+                        link        => $url   || '',
+                        description => $desc  || '' };
+                }
+            }
+        }
+        else {
+            RT->Logger->error( 'No value for Content custom field for article with Links type: ' . $ArticleObj->id );
+        }
+    }
+
+    $title = loc( 'Modify article #[_1]', $ArticleObj->Id );
+}
+
+# if they're working on an existing article
+if ( $ArticleObj->id ) {
+    unless ( $ArticleObj->CurrentUserHasRight('ShowArticle') ) {
+        $m->comp( "/Elements/Error",
+            Why => loc("No permission to view Article") );
+    }
+    $DefaultClass = $ArticleObj->ClassObj->Id unless $Class;
+}
+
+# add at least one empty content link row
+push @content_links, { title => '', link => '', description => '' };
+# ensure there are at least 3 content link rows
+push @content_links, { title => '', link => '', description => '' }
+    while scalar @content_links < $MIN_CONTENT_LINK_ROWS;
+
+# Type might be blank and should default to Content
+my $content_type = $ARGS{Type} || $ArticleObj->Type || 'Content';
+</%INIT>
+
+
+<%ARGS>
+$id => undef
+$Class => undef
+</%ARGS>

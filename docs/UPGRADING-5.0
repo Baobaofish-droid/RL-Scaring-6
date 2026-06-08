@@ -1,0 +1,763 @@
+=head1 UPGRADING FROM RT 4.4.0 and greater
+
+The 5.0 release is a major upgrade and as such there are more changes
+than in a minor bugfix release (e.g., 4.4.0 to 4.4.1) and some of these
+changes are backward-incompatible. The following lists some of the notable
+changes, especially those that might require you to change a configuration
+option or other setting due to a change in RT. Read this section carefully
+before you upgrade and look for changes to features you currently use.
+
+See F<devel/docs/UPGRADING-5.0> for internals changes relevant to
+extension writers, including deprecated code.
+
+=head2 Upgrading Recommendations
+
+RT now defaults to a database name of rt6 and an installation root of
+/opt/rt6.
+
+If you are upgrading, you will likely want to specify that your database is
+still named rt4 or even rt3. Alternatively, you could import a backup of your
+database as rt6 to conform to the new default, although this isn't required.
+
+Upgrading to RT 5 over an existing RT 4 installation (/opt/rt4) is not
+recommended and will almost certainly cause issues. Instead, do a fresh
+install into /opt/rt6 (or your custom location) for the code portion of the
+upgrade. Then import your existing database and run the database upgrade
+steps using make upgrade-database.
+
+We recommend this approach because of the large number of changes to the code
+base for this major release. We moved some things to new locations and old
+files are not removed as part of the upgrade process. These old files will
+still be detected by RT in some cases and will cause issues.
+
+Installing a fresh code base will also allow you to evaluate your local
+modifications and configuration changes as you migrate to 5.0. If you have
+changes made directly to the RT code, it's a good time to look at the hooks
+RT provides for custom code in extensions or in the local directory. See
+F<docs/writing_extensions.pod> for more information.
+
+=head2 Database Changes
+
+=over
+
+=item *
+
+For MySQL and MariaDB, the default character set has been updated to utf8mb4
+to accommodate more unicode characters including emojis. See F<README.MySQL>
+and F<README.MariaDB> for details.
+
+=item *
+
+The Id field in some tables is changed from INT to BIGINT to accommodate
+large RT systems that may hit the maximum number of ids. Because this
+change touches large RT tables like Transactions and Attachments, this
+upgrade step may take a while to run.
+
+You also will need free disk space equal to the size of these tables
+while running because MySQL, MariaDB, and PostgreSQL will create a
+temporary copy of the table while running. If you don't have sufficient
+space, it can cause this step to fail.
+
+=back
+
+=head2 Notable Changes
+
+=over
+
+=item *
+
+System configuration options can now be changed by SuperUsers via the
+web UI. File-based configuration options are still loaded. Changes made
+via the web UI take precedence over file-based options if both are set.
+
+If you prefer to keep all configuration in files and disable editing in
+the web UI, set this option to 0:
+
+    Set($ShowEditSystemConfig, 0);
+
+=item *
+
+The variables which alter the set of HTML elements allowed in HTML
+scrubbing have moved; they have been renamed, and are now found under
+L<RT::Interface::Web::Scrubber>.
+
+=item *
+
+The articles interface on tickets has been simplified, now showing only
+a dropdown for selecting articles. This dropdown converts to an autocomplete
+box when the dropdown contains more than C<$DropdownMenuLimit> items.
+
+With this simplified interface, the "hotlist" feature is no longer needed as
+all articles in classes applied to a given queue are available in the
+dropdown/autocomplete field. To prevent articles in a class from appearing
+for a queue, you can unapply the class from that queue.
+
+The upgrade steps remove the hotlist configuration from your RT database
+by removing that column from the Articles table. Since the article class
+must be applied to a queue for the hotlist items to appear, all articles
+should continue to appear in the new interface.
+
+=item *
+
+The updated rich text editor now shows the browser context menu (right-click
+menu) by default, so the MessageBoxUseSystemContextMenu configuration option is
+no longer needed and has been removed.
+
+=item *
+
+Dashboards previously in the Home menu have been moved to the Reports menu.
+The reports previously in the Reports menu are still there, but you can now
+edit the Reports menu like the previous Home menu, so you can remove the
+default reports if you like.
+
+All other dashboard menu functionality should be the same including editing
+your own menu, the global settings, and setting a user's menu from the user
+admin page for that user.
+
+=item *
+
+Accessing RT from a mobile device no longer defaults to the mobile-optimized
+interface. RT 5.0 is fully responsive so the full UI can be used on mobile
+devices. Set the configuration option C<$ShowMobileSite> to true to restore
+the previous behavior.
+
+=item *
+
+RT can now run with GnuPG 2.2. On install or upgrade, it requires the updated
+version of L<GnuPG::Interface>. C<make testdeps> will test for the correct version.
+RT should also still run with GnuPG 1.4.x. It is not supported for GnuPG versions
+2.0 or 2.1. On some Linux systems, you may need to add a new repo to get an
+updated GnuPG package with some version of 2.2.
+
+=item *
+
+RT search results now allow inline editing of ticket metadata, greatly
+improving usability and convenience. Editable fields are now the default
+for most ticket fields in search results.
+
+The ticket Owner field sometimes requires extra work to build and can
+result in slower page load times, so the default Owner format is
+read-only. To enable inline edit for Owner, update your search to use
+the format OwnerNameEdit.
+
+If you experience slower page loads with OwnerNameEdit, you can
+display Owner as an autocomplete box rather than a dropdown using the
+L<AutocompleteOwners|https://docs.bestpractical.com/rt/4.4.4/RT_Config.html#AutocompleteOwners>
+configuration option. This may also help other areas of RT in addition to
+searches.
+
+We are investigating options to improve the underlying queries. Some users have
+reported improved performance with the following indexes, at least on PostgreSQL:
+
+   CREATE INDEX ACL2 ON acl (objecttype, objectid);
+   CREATE INDEX ACL3 ON acl (principalid, rightname, principaltype);
+
+We are performing testing and looking for additional feedback before adding these
+to default RT.
+
+=back
+
+=head2 Extensions Integrated into RT 5
+
+The following extensions are now part of RT 5. If you previously used any as
+an extension, you no longer need the extension after upgrading and can
+remove the C<Plugin> line from your RT configuration.
+
+Changes you may need to apply if you previously used the extension
+are described below.
+
+=over
+
+=item RT::Extension::QuoteSelection
+
+=item RT::Extension::RightsInspector
+
+=item RT::Extension::ConfigInDatabase
+
+If you previously used L<RT::Extension::ConfigInDatabase>
+as an extension, run the F<etc/upgrade/upgrade-configurations> utility
+after completing all the other upgrade steps from the F<README>. This
+will migrate your existing configuration to the new core RT tables.
+
+=item RT::Extension::CustomRole::Visibility
+
+=item RT::Extension::PriorityAsString
+
+If you previously used numbers for priority and would like to continue
+to do so, you can set the new C<$EnablePriorityAsString> option to false.
+That will disable the new string-based display.
+
+We also now hide Final Priority by default, but if you previously used it
+and would like to continue to do so, you can add this to the Custom CSS
+section on the Theme editor:
+
+    .FinalPriority, .TicketFinalPriority {
+        display: flex;
+    }
+    .priority div.value .current-value {
+        visibility: visible;
+    }
+    .priority div.value .current-value .FinalPriority {
+        display: inline;
+    }
+
+If you would like to now use strings for priority like Low, Medium, High,
+check the new C<%PriorityAsString> configuration option. RT provides a simple
+default setting that may be sufficient. Set new values if you would like
+to customize your priority options.
+
+If you were previously using the PriorityAsString extension, you no longer
+need the extension installed. The C<%PriorityAsString>> configuration is
+simplified and consolidated, so check the documentation for details on
+updating your previous configuration.
+
+=item RT::Extension::AssetSQL
+
+The configuration option $AssetSQL_HideSimpleSearch is now $AssetHideSimpleSearch.
+The configuration option $AssetSearchFormat is now $AssetSimpleSearchFormat.
+
+See the configuration documentation in L<RT_Config.pm> for new configuration
+options added for AssetSQL and the new asset query builder.
+
+=item RT::Extension::LifecycleUI
+
+=item RT::Extension::REST2
+
+=item RT::Authen::Token
+
+If you previously used L<RT::Authen::Token|https://metacpan.org/pod/RT::Authen::Token>
+as an extension, run the F<etc/upgrade/upgrade-authtokens> utility
+after completing all the other upgrade steps from the F<README>. This
+will migrate your existing tokens to the new core RT tables.
+
+=back
+
+=head1 UPGRADING FROM 5.0.0 AND EARLIER
+
+=over 4
+
+=item *
+
+The extension C<RT::Extension::FormattedTransaction> was added to core. This
+adds a new RT dependency on the Perl module L<Text::WordDiff>, so you will be
+prompted to install this new module if your system doesn't have it.
+
+=item *
+
+Similar to the note above regarding the Owner field in search results,
+custom fields in search results also now have inline edit enabled by default,
+allowing you to change values directly in search results.
+
+For heavy search result pages with many columns display or many rows,
+page loads may be slower with this inline edit mode enabled. If you don't
+need to edit custom field values, you can change search result columns
+from C<CustomField.{Foo}> to C<CustomFieldView.{Foo}>. That column will
+then load a view-only field which may improve page load speed.
+
+=item *
+
+In the self service interface, the "Search Articles" box in the menu bar previously
+was displayed to users who had the global right "ShowArticle". This is now
+controlled by a new configuration option C<$SelfServiceShowArticleSearch>. This new
+option defaults to off, so if you currently allow self service users to use article search,
+enable this option to keep the article search box available.
+
+=item *
+
+System-level saved searches can now be displayed on the RT at a glance page.
+Previously some users saw errors like:
+
+    Either you have no rights to view saved search system-SavedSearch-34
+    or identifier is incorrect
+
+If you are still seeing that error after updating to RT 5.0.1, edit the page, remove
+the saved search, save, then add it back again. After saving again, it should appear
+as expected.
+
+=item *
+
+The System Configuration editor (Admin > Tools > System Configuration > Edit)
+now uses JSON rather than Perl syntax to represent arrays and hashes.  Be
+sure to enter valid JSON if you wish to modify an array- or hash-valued
+configuration setting.
+
+=back
+
+=head1 UPGRADING FROM 5.0.1 AND EARLIER
+
+=over 4
+
+=item *
+
+Previously C<$OwnerEmail> was shown on the RT login page for users to
+contact with RT issues, in addition to being the address used to send various
+errors like email bounces. A new config option C<$RTSupportEmail> is now used
+for the login page display, allowing admins to set C<$OwnerEmail> to a different
+address if desired, and possibly not display an email address on the login page.
+
+If you want to still display your C<$OwnerEmail> on the login page, just set
+C<$RTSupportEmail> to the same value.
+
+=item * "RT at a glance" is now a dashboard
+
+"RT at a glance" previously could be customized and was stored as
+a special configuration used just for the homepage.
+It is now a dashboard just like other dashboards in RT.
+With this update, you can now easily change your entire homepage
+by selecting a different dashboard to be your default homepage.
+After upgrading, RT at a glance should look the same as it did
+previously, but there are various changes in how it is managed.
+
+The previous global RT at a glance page is converted to a new System
+dashboard called "Homepage". Individual users with a custom homepage
+will see a new dashboard in "My Dashboards" called Homepage. These are
+regular dashboards now, so the names can be changed if desired.
+
+The gears icon on the homepage now links to a page that displays all
+available dashboards and users can select their default homepage from
+the list. To customize, users can create a new dashboard. The privacy
+of dashboards can be set to an individual user, a group, or system-wide,
+depending on the user's rights. This makes it easy to set up and share
+useful homepage configurations.
+
+Users who want to customize their homepage need the rights "ModifySelf",
+"CreateOwnDashboard", "DeleteOwnDashboard", "ModifyOwnDashboard" and
+"SeeOwnDashboard". All users who have "ModifySelf" are automatically granted
+these dashboard rights as part of the upgrade. You can modify these rights
+as desired if you don't want users to be able to create dashboards.
+
+All users can see the default System dashboard set for RT. If you
+want to allow users to see other System dashboards, grant the
+"SeeDashboard" right. This is not done automatically with the upgrade.
+
+For RT admins, Admin > Global > RT at a glance is still available,
+but instead of loading the page configuration editor, it shows a
+list of System dashboards that can be set as the default homepage.
+The RT at a glance option in the user admin page sub-menu also now shows
+a list of dashboards to set for that user.
+
+=back
+
+=head1 UPGRADING FROM 5.0.0 AND 5.0.1
+
+This section duplicates upgrading notes for changes included in
+RT 4.4.5 and RT 5.0.2. These changes are duplicated here for
+users upgrading from RT 5.0.0 or 5.0.1 who won't run the RT 4.4.5
+upgrade.
+
+=over 4
+
+=item * Privacy Menu in Query Builder
+
+On the Query Builder, the Privacy menu loads groups you are a member of as potential
+places to save searches. However, it previously did not confirm the current user
+had the EditSavedSearches right, so you might try to save a search with a group
+and receive an error until that right was granted.
+
+This has been fixed, so now groups load only if you have rights to create the
+search via EditSavedSearches on the group or globally. This may change the groups
+that appear in the Privacy menu, but shouldn't change functionality since users
+without the correct rights were unable to create searches.
+
+=item * AttachmentListCount Default
+
+The C<AttachmentListCount> configuration option now defaults to 5.
+To restore the previous configuration and show all attachments,
+add the following to your C<RT_SiteConfig.pm>.
+
+    Set($AttachmentListCount, undef);
+
+=item * User Timezone and Dates in Ticket Searches
+
+This releases fixes an issue with how "=" in time comparisons in ticket
+searches applied timezone settings. Previously, dates would be adjusted
+based on the global RT timezone even if the user had a different timezone.
+This has been fixed to correctly use the user's timezone.
+
+Note that this change may modify results for some saved searches for users
+with a different timezone than RT's global setting.
+
+=item * Script to reduce records in CachedGroupMembers
+
+When adding groups to roles on tickets, we have found that caching the
+members of these added groups in the CachedGroupMembers table makes
+performance worse rather than improving it. This release includes updates
+to no longer add these members recursively.
+
+If you use groups in ticket roles, it's likely your CachedGroupMembers table
+has a large number of now unnecessary records and these can hurt performance.
+To delete these extra records run the following script:
+
+    /opt/rt6/etc/upgrade/shrink-cgm-table
+
+Depending on how many records your system has, this may take a while to run.
+After you run this, you may have significantly reduced the number of records
+in your CachedGroupMembers table, and may need to tell your database to
+refresh indexes/statistics.
+
+=item * Run Transaction Batch last, even in nested updates
+
+When RT processes scrips, Batch mode scrips should always run last.
+Previously, with nested updates, inner updates would run batch before
+all outer updates were complete. One example of this is processing ticket
+updates, the Basics update calls an inner "atomic" transaction to update
+Owner, which would cause the unexpected batch run. This has been fixed
+so batch runs only once for the outermost updates. All transactions
+performed for that batch are available from the C<TransactionBatch> method
+as expected.
+
+=item * Ambiguous Owner order by option in search replaced with Owner.Name
+
+RT 4.4.5 adds a bunch of new order by and format options for users and roles
+to the Query Builder. For example, you can order by user fields on a user
+like Owner.EmailAddress, Owner.RealName, or even Owner.Organization.
+As part of this change, the previous Owner entry has been renamed to
+Owner.Name.
+
+The upgrade scripts include a step to make this change in any saved searches
+in the database automatically. If you have Owner as an order by field in
+searches stored elsewhere or as a link, you can update to Owner.Name manually.
+
+=item * Default "order by" field for roles in search results
+
+Because of the new options mentioned above, when displaying role information
+we also set defaults for order by behavior when you click headers on search
+results to re-sort them. For example, in a list of ticket results, you can
+click on Requestors to re-sort the results by that field.
+
+Previously this order by used EmailAddress. It now defaults to Name
+because we believe that is more common for sorting, but because of
+the new features you can change this in your search Format.
+For example, you can update the line in the Format section on
+the Advanced page to look like this:
+
+    '<small>__Requestor.EmailAddress__</small>',
+
+That column will then specifically show EmailAddress and when you click
+it will order by EmailAddress.
+
+=back
+
+=head1 UPGRADING FROM 5.0.2 AND EARLIER
+
+=over 4
+
+=item * Fix for Mason cache handling
+
+RT 5.0.2 introduced a new button on the System Configuration page to easily
+clear the mason cache, and a bug was found related to the updated
+Mason cache handling. The bug is most evident in extensions like
+RTIR where some links will stop working correctly. This is because
+some callbacks would not get correctly re-initialized on fresh page
+loads. This bug is fixed in this release.
+
+=item * Additional use of bind variables in queries
+
+RT previously used bind variables in most queries, but some classes of queries,
+like ad-hoc queries generated by the query builder, did not. This could cause
+performance problems with Oracle, especially systems with very large databases.
+
+RT 5.0.3, along with DBIx::SearchBuilder version 1.70 and newer, uses bind
+variables for all queries. This should improve performance on Oracle and it may
+help other databases also. If you were previously using cursor_sharing = FORCE
+for your RT sessions in Oracle to help cache queries without bind parameters,
+you can try switching to EXACT and testing performance after upgrading.
+
+=back
+
+=head1 UPGRADING FROM 5.0.3 AND EARLIER
+
+=over 4
+
+=item * Updated defaults for C<$WebSecureCookies>
+
+The previous default value for the configuration option C<$WebSecureCookies>
+was '0', meaning that RT did not, by default, set the C<Secure> option on
+session cookies. The default for this option has been changed to '1', which
+will require all users to connect to the RT instance over SSL and will trigger
+other changes in browser behavior, such as cookie caching.
+
+If you are running RT over http without SSL, this will cause problems and
+you can set your local value back to '0'.
+
+RT previously did not set a C<SameSite> policy for session cookies.  How this
+is handled by browsers varies.  RT 5.0.4 introduces the configuration option
+C<$WebSameSiteCookies> with a default value of 'Lax', which provides
+additional defense against CSRF attacks in some browsers.  See
+L<https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite>
+for more details on valid values, their meaning, and browser support.
+
+=item * Removed dependency on Pod::Select
+
+We no longer depend on the Pod::Select Perl module since it has been deprecated
+following its removal from the Perl core.
+
+=item * Perl module change to GraphViz2
+
+RT 4.4.6 and earlier use the Perl GraphViz module for interfacing with the graphviz
+library for generating ticket link graphs.  That module has been deprecated so
+we have replaced it with the GraphViz2 module.
+
+Systems using C<--enable-graphviz> will be prompted to install the Perl
+GraphViz2 module when upgrading.
+
+=item * New C<$EmailDashboardInlineCSS> option for dashboard email
+
+RT's email dashboard feature tries to send an HTML email that looks as much
+like the RT dashboard as possible. In doing so, it pulls in a large amount
+of CSS, creating very large emails. Not all of that CSS is needed, so
+we have added the new option C<$EmailDashboardInlineCSS> to inline the
+CSS. We have found this reduces the size of the dashboard emails
+significantly and can help with rendering in some email clients.
+
+To use this new feature, you must install the optional Perl module
+L<CSS::Inliner>, version 4018 or later, then enable the feature in
+your RT configuration.
+
+=item * ModifyLoginRedirect callback in Logout.html moved
+
+We try hard not to modify callbacks since they are made for external
+code to reference, but in this case the logic of the page changed
+and we had to move the callback location so it could correctly
+modify the URL value, if needed. If you were using this callback to
+modify the redirect URL on logout, your code will continue to work
+as intended. However, if you were using this callback for other
+reasons, you may need to update your code to use the C<BeforeSessionDelete>
+callback instead.
+
+=item * Custom role keys in REST2 ticket endpoints changed
+
+We updated custom role keys from "GroupType" syntax like "RT::CustomRole-1"
+to "Name" in REST2 ticket endpoints, to be consistent with core roles.
+We also added a "CustomRoles" entry to cover all custom roles, making it
+consistent with similar results for "CustomFields".
+
+For example, the GET response of C<XX_RT_URL_XX/REST/2.0/ticket/ID> changes
+from this:
+
+    {
+        ...
+        "RT::CustomRole-1" : [
+           {
+              "id" : "root",
+              "type" : "user",
+              "_url" : "XX_RT_URL_XX/REST/2.0/user/root"
+           }
+        ],
+        ...
+    }
+
+to:
+
+    {
+        ...
+        "Manager" : [
+           {
+              "id" : "root",
+              "type" : "user",
+              "_url" : "XX_RT_URL_XX/REST/2.0/user/root"
+           }
+        ],
+        "CustomRoles" : {
+           "Manager" : [
+              {
+                 "id" : "root",
+                 "type" : "user",
+                 "_url" : "XX_RT_URL_XX/REST/2.0/user/root"
+              }
+           ]
+        },
+        ...
+    }
+
+We recommend using the "CustomRoles" section because individual top
+level custom role entries like the "Manager" following "..." in
+the above example will be removed in the future.
+
+=item * DBD::SQLite Dependency updated to 1.72
+
+We use the wonderful L<SQLite|https://www.sqlite.org> database for
+testing, although we don't recommend it for production RT installations.
+Updates in RT 5.0.4 require a new version of L<DBD::SQLite> and this will
+be checked during the normal C<make testdeps> step on upgrade if it is
+used based on your configuration. We do not test upgrades on SQLite
+databases, so if you are using SQLite in some way
+with your RT, make sure to take backups before upgrading.
+
+=item * New search URL shortener
+
+RT will now shorten search URLs by default, so instead of the longer
+URLs previously seen when using the Query Builder, you will now see a short
+code in the browser URL bar. This update makes sharing searches much easier
+and resolves some issues with extremely long search URLs. Any existing search
+URLs saved as bookmarks should continue to work as normal.
+
+This new feature requires a new table, which is installed automatically
+as part of the upgrade process. If you prefer not to use shortened URLs,
+you can disable this new feature by setting C<$EnableURLShortener> to
+false.
+
+=item * HTML Custom Fields
+
+RT now supports an C<HTML> type for custom fields, so if you have custom
+fields containing C<HTML>, you can update them and switch the type to C<HTML>
+to use CKEditor for editing. This is specifically useful for the Content
+custom field in articles.
+
+=item * MySQL 8 now supported
+
+Starting with RT 5.0.4, RT now supports MySQL 8. Note that as part of this upgrade
+you also need to update the module L<DBIx::SearchBuilder>.
+
+=back
+
+=head1 UPGRADING FROM 5.0.4 AND EARLIER
+
+=over 4
+
+=item Update Messages Changed for Consistency
+
+Some parts of RT, notably Bulk Update, previously could show update messages
+like:
+
+    Ticket 123: Ticket 123: Status changed from 'new' to 'open'
+
+This is fixed in RT 5.0.5. As part of this fix, some JSON responses sent for
+REST 2 operations are also updated. For example, an Article update message
+is changed:
+
+    Old: Article More updates using REST: Name changed from...
+    New: Article 123: Name changed from...
+
+If you have any automation using REST 2 that checks these JSON response
+messages, you may need to update your system to match the new format.
+
+=back
+
+=head1 UPGRADING FROM 5.0.5 AND EARLIER
+
+=over 4
+
+=item Ticket Owner Updates and Notifications
+
+When processing ticket updates, RT previously processed the reply/comment
+before processing other ticket updates, including owner changes. For RTs
+configured to send email to some users only when they are the ticket owner,
+this processing order resulted in new owners not seeing the reply/comment associated
+with the update that made them the new owner. This could cause confusion, especially
+if the reply/comment included information specifically addressed to the new
+owner.
+
+To fix this issue, owner changes are now processed before messages, so new
+owners will now see the message associated with the change that made them
+owner.
+
+This will result in new email being sent when it wasn't previously. We believe
+this fixes the previous incorrect behavior. However, if you relied on this behavior,
+and don't want the new email, you may need to modify your scrip configurations.
+
+=item Spreadsheet (TSV) Download Format
+
+The format of some column headers in spreadsheets (TSV files) downloaded from ticket
+search results has been updated. Specifically custom fields and custom roles no
+longer show "CustomField.{}" or "CustomRole.{}" in the header. Also, multi-word
+headers like "EmailAddress" now have spaces added so the header will appear like
+"Email Address".
+
+This should make headers more readable, but if you have any automated processes that
+parse the headers, you will need to update your parsing code.
+
+=item Running RT with MariaDB and MySQL 5.7
+
+RT uses the perl module DBD::mysql to connect to MySQL-type databases, and before
+version 5.001, it worked with older MySQL versions like 5.7, newer versions like 8,
+and all versions of MariaDB. Starting with DBD::mysql 5.001, it supports only
+MySQL 8 and newer.
+
+To align with this change, RT's C<configure> script now has two new options available
+for C<--with-db-type>. To run with MySQL 5.7 or older, use C<mysql5>. To run with
+MariaDB, use C<MariaDB>. These will configure the installer to use an older,
+compatible version of DBD::mysql.
+
+If you install a newer version of DBD::mysql by mistake, you can uninstall it or
+manually force install a version older than 5.001.
+
+=item Unlimited Option in SearchResultsPerPage Configuration
+
+RT 5.0.4 added C<@SearchResultsPerPage> as a configuration option to allow admins to
+control the options presented in the "Rows per page" dropdown in the Query Builder.
+When it was added, the "Unlimited" option was automatically added to the list of options
+configured. This prevented admins from removing the "Unlimited" option from the
+list, so this has been updated in RT 5.0.6 to use the configured options only with
+no other options added automatically.
+
+If you previously set a custom C<@SearchResultsPerPage> and you want to keep the
+"Unlimited" option, update your configuration and add "0" to your list.
+
+=back
+
+=head1 UPGRADING FROM 5.0.7 AND EARLIER
+
+=over 4
+
+=item Enabling Scheduled Processes in the Web UI
+
+RT 5.0.8 adds a new page for administrators to schedule automated processes
+in the web UI. This allows SuperUsers to add and modify C<rt-crontool> jobs
+that previously had to be managed on the server directly in C<cron>.
+
+To enable this, schedule the new utility C<bin/rt-run-scheduled-processes> in
+cron to run every 15 minutes. This job will then run any jobs scheduled in the
+web UI.
+
+=back
+
+=head1 UPGRADING FROM 5.0.8 AND EARLIER
+
+=over 4
+
+=item Helpers/Autocomplete/Articles ModifySuggestion Callback Updated
+
+The autocomplete helper endpoint at Helpers/Autocomplete/Articles has a
+callback ModifySuggestion. This callback mirrors similar callbacks in the
+Users and Groups endpoints. However, when it was added, the pattern in
+Users and Groups was not copied correctly and the callback passed the
+full array, even though it is called for each article, and it used a
+parameter "label" instead of "article" for the article object. This
+is now fixed and the ModifySuggestion callback in Articles follows the
+same pattern as Users and Groups.
+
+Given the strange arguments in the previous callback, we think it's unlikely
+it is being used. However, if you were using this callback, you will need
+to update your code for the new parameters.
+
+=item Log level of RT::Action::SetStatus unresolved messages
+
+When calling RT::Action::SetStatus via rt-crontool, the operation will fail
+if the ticket has unresolved dependencies (linked tickets). This failure is
+logged and previously it used the "error" level. Since this is an informational
+message and not a system error, we have changed the log level for these
+"unresolved" messages to warning. All other failures are still error.
+
+This makes it possible for admins to better tune error notifications
+and alert on errors, but not warnings based on linked tickets.
+
+=back
+
+=head1 UPGRADING FROM 5.0.9 AND EARLIER
+
+=over 4
+
+=item Support to allow links from Android Apps
+
+Links to RT from Android apps like Slack send a Referer header in the form
+C<android-app://com.slack/> and previously this generated an error because RT
+expected schemes that represented a host, like http[s]. The C<ReferrerWhitelist>
+configuration option now accepts scheme as part of the configuration so you can
+whitelist Android apps now, e.g.
+
+    Set(@ReferrerWhitelist, qw(android-app://com.slack/));
+
+=back
+
+=cut

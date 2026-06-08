@@ -1,0 +1,339 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Elements/Header,
+    Title => $title,
+    LoadMainContent => 1,
+&>
+<& /Elements/Tabs &>
+    
+% $m->callback( CallbackName => 'BeforeActionList', ARGSRef => \%ARGS, results => \@results );
+<& /Elements/ListActions, actions => \@results &>
+
+<form action="<% RT->Config->Get('WebPath') . $m->request_path %>" method="post" enctype="multipart/form-data" name="TicketCreate">
+  <input type="hidden" class="hidden" name="id" value="new" />
+  <input type="hidden" class="hidden" name="Token" value="<% $ARGS{'Token'} %>" />
+  <input type="hidden" name="QueueChanged" value="0" />
+
+% if ( $ARGS{'AddGroupCc'} ){
+<input type="hidden" class="hidden" name="AddGroupCc" value="<% $ARGS{'AddGroupCc'} %>" />
+% }
+
+% if ( $ARGS{'ChangedField'} ) {
+%   for my $field ( ref $ARGS{ChangedField} eq 'ARRAY' ? @{ $ARGS{ChangedField} } : $ARGS{ChangedField} ) {
+  <input type="hidden" class="hidden" name="ChangedField" value="<% $field %>" />
+%   }
+% }
+
+% $m->callback( CallbackName => 'FormStart', QueueObj => $QueueObj, ARGSRef => \%ARGS );
+
+% if ($gnupg_widget) {
+  <& /Elements/Crypt/SignEncryptWidget:ShowIssues, self => $gnupg_widget, Queue => $QueueObj &>
+% }
+
+% $m->callback( CallbackName => 'BeforeShowWidgets', QueueObj => $QueueObj, ARGSRef => \%ARGS );
+<& /Elements/ShowWidgets, Object => $QueueObj, Page => 'Create', ARGSRef => \%ARGS, &>
+% $m->callback( CallbackName => 'AfterShowWidgets', QueueObj => $QueueObj, ARGSRef => \%ARGS );
+
+</form>
+
+<%INIT>
+$m->callback( CallbackName => "Init", ARGSRef => \%ARGS );
+my $Queue = $ARGS{Queue};
+
+# Use default queue from config site or user prefs if none provided
+unless ($Queue) {
+    $Queue = GetDefaultQueue( IncludeFirst => 1 );
+}
+
+Abort( loc( "Permission Denied" ) ) unless $Queue;
+
+RT::Interface::Web::Session::Set(
+    Key   => 'DefaultQueue',
+    Value => $Queue,
+);
+
+# Pass Queue info to htmx widgets
+$ARGS{Queue} = $Queue;
+
+my $current_user = $session{'CurrentUser'};
+
+if ($CloneTicket) {
+    my $CloneTicketObj = RT::Ticket->new( $session{CurrentUser} );
+    $CloneTicketObj->Load($CloneTicket)
+        or Abort( loc("Ticket could not be loaded"), Code => HTTP::Status::HTTP_BAD_REQUEST );
+
+    my $clone = {
+        Requestors => join( ',', $CloneTicketObj->RequestorAddresses ),
+        Cc         => join( ',', $CloneTicketObj->CcAddresses ),
+        AdminCc    => join( ',', $CloneTicketObj->AdminCcAddresses ),
+        InitialPriority => $CloneTicketObj->Priority,
+    };
+
+    $clone->{$_} = $CloneTicketObj->$_()
+        for qw/Owner Subject FinalPriority/;
+
+    $clone->{$_} = $CloneTicketObj->$_->AsString
+        for grep { $CloneTicketObj->$_->IsSet }
+        map      { $_ . "Obj" } qw/Starts Started Due Resolved/;
+
+    my $get_link_value = sub {
+        my ($link, $type) = @_;
+        my $uri_method = $type . 'URI';
+        my $local_method = 'Local' . $type;
+        my $uri = $link->$uri_method;
+        return if $uri->IsLocal and
+                $uri->Object and
+                $uri->Object->isa('RT::Ticket') and
+                $uri->Object->__Value('Type') eq 'reminder';
+
+        return $link->$local_method || $uri->URI;
+    };
+    my (@refers, @refers_by);
+    my $refers = $CloneTicketObj->RefersTo;
+    while ( my $refer = $refers->Next ) {
+        my $refer_value = $get_link_value->($refer, 'Target');
+        push @refers, $refer_value if defined $refer_value;
+    }
+    $clone->{'new-RefersTo'} = join '  ', @refers;
+
+    my $refers_by = $CloneTicketObj->ReferredToBy;
+    while ( my $refer_by = $refers_by->Next ) {
+        my $refer_by_value = $get_link_value->($refer_by, 'Base');
+        push @refers_by, $refer_by_value if defined $refer_by_value;
+    }
+    $clone->{'RefersTo-new'} = join '  ', @refers_by;
+
+    my $cfs = $CloneTicketObj->QueueObj->TicketCustomFields();
+    while ( my $cf = $cfs->Next ) {
+        my $cf_id     = $cf->id;
+        my $cf_values = $CloneTicketObj->CustomFieldValues( $cf->id );
+        my @cf_values;
+        while ( my $cf_value = $cf_values->Next ) {
+            push @cf_values, $cf_value->Content;
+        }
+
+        next unless @cf_values;
+
+        if ( @cf_values > 1 && $cf->Type eq 'Select' ) {
+            $clone->{"CustomField-" . $cf->Id} = \@cf_values;
+        }
+        else {
+            if ( $cf->Type eq 'DateTime' ) {
+                # Convert to user timezone. DateTime doesn't have multiple values, so only need to take care of
+                # $cf_values[0]
+
+                my $date = RT::Date->new( $session{'CurrentUser'} );
+                $date->Set( Format => 'ISO', Value => $cf_values[0] );
+                $cf_values[0] = $date->ISO( Timezone => 'user' );
+            }
+
+            $clone->{"CustomField-" . $cf->Id} = join "\n",
+              @cf_values;
+        }
+    }
+
+    $m->callback( CallbackName => 'MassageCloneArgs', ARGSRef => $clone, Queue => $Queue );
+
+    for ( keys %$clone ) {
+        $ARGS{$_} = $clone->{$_} if not defined $ARGS{$_};
+    }
+
+}
+
+# no support for muliple articles included at the same time
+( $ARGS{IncludeArticleId} ) = grep defined && length, @{ $ARGS{IncludeArticleId} }
+    if ref( $ARGS{IncludeArticleId} ) eq 'ARRAY';
+
+my @results;
+
+my $QueueObj = RT::Queue->new($current_user);
+$QueueObj->Load($Queue) || Abort(loc("Queue [_1] could not be loaded.", $Queue||''), Code => HTTP::Status::HTTP_BAD_REQUEST);
+
+my $title = loc("Create a new ticket in [_1]", $m->scomp("/Ticket/Elements/ShowQueue", QueueObj => $QueueObj, Escape => 0));
+
+$m->callback( QueueObj => $QueueObj, title => \$title, results => \@results, ARGSRef => \%ARGS );
+
+$m->scomp( '/Articles/Elements/SubjectOverride', ARGSRef => \%ARGS, QueueObj => $QueueObj, results => \@results );
+
+$QueueObj->Disabled && Abort(loc("Cannot create tickets in a disabled queue."), Code => HTTP::Status::HTTP_NOT_FOUND);
+
+if ( $ARGS{QueueChanged} ) {
+    my %changed = map { $_ => 1 } ref $ARGS{ChangedField} eq 'ARRAY' ? @{ $ARGS{ChangedField} } : $ARGS{ChangedField}
+        if $ARGS{ChangedField};
+
+    for my $field ( qw/Content InitialPriority FinalPriority SLA Starts Due/, grep { /-CustomField-/ && !/-Magic$/ } sort keys %ARGS ) {
+        if ( !$changed{$field} ) {
+            delete $ARGS{$field};
+            delete $DECODED_ARGS->{$field}; # EditCustomField uses $DECODED_ARGS
+        }
+    }
+}
+
+my $ticket = RT::Ticket->new($current_user); # empty ticket object
+
+ProcessAttachments(ARGSRef => \%ARGS);
+
+my $checks_failure = 0;
+
+{
+    my ($status, @msg) = $m->comp(
+        '/Elements/ValidateCustomFields',
+        CustomFields => $QueueObj->TicketTransactionCustomFields,
+        Object => RT::Transaction->new( $session{'CurrentUser'} ),
+        ARGSRef => \%ARGS
+    );
+    unless ( $status ) {
+        $checks_failure = 1;
+        push @results, @msg;
+    }
+
+    ($status, @msg) = $m->comp(
+        '/Elements/ValidateCustomFields',
+        CustomFields    => $QueueObj->TicketCustomFields,
+        ARGSRef         => \%ARGS
+    );
+    unless ($status) {
+        $checks_failure = 1;
+        push @results, @msg;
+    }
+
+    ( $status, @msg ) = PreprocessTimeUpdates( \%ARGS );
+    unless ( $status ) {
+        push @results, @msg;
+        $checks_failure = 1;
+    }
+}
+
+my $gnupg_widget = $m->comp('/Elements/Crypt/SignEncryptWidget:new', Arguments => \%ARGS );
+$m->comp( '/Elements/Crypt/SignEncryptWidget:Process',
+    self      => $gnupg_widget,
+    QueueObj  => $QueueObj,
+);
+
+my $reload_page;
+if ( grep { /SubmitTicket$/ && $ARGS{$_} } keys %ARGS ) {
+    my $status = $m->comp('/Elements/Crypt/SignEncryptWidget:Check',
+        self      => $gnupg_widget,
+        Operation => 'Create',
+        QueueObj  => $QueueObj,
+    );
+    unless ( $status ) {
+        $checks_failure = 1;
+        $reload_page = 1;
+    }
+}
+
+if ($ARGS{IncludeArticleId}) {
+    my $article = RT::Article->new($session{'CurrentUser'});
+    my ($ret, $msg) = $article->Load( $ARGS{IncludeArticleId} );
+
+    if (!$ret) {
+        # Make sure we don't finalize the ticket if we won't be able to include the article
+        $checks_failure = 1;
+        push @results, loc('Unable to load article "[_1]"', $ARGS{IncludeArticleId});
+    }
+}
+
+# check email addresses for RT's
+{
+    my $custom_roles = $QueueObj->CustomRoles;
+    my @static_roles = qw(Requestors Cc AdminCc);
+
+    while (my $role = shift @static_roles || $custom_roles->Next) {
+        my $field = ref $role ? $role->GroupType : $role;
+        my $value = $ARGS{ $field };
+        next unless defined $value && length $value;
+
+        my ( $filtered_emails, $error_msgs ) = ProcessEmailAddresses(
+            Field   => $field,
+            Value   => $value,
+            Label   => ref $role ? $role->Name : loc($role =~ /^(.*?)s?$/),
+            ARGSRef => \%ARGS,
+        );
+
+        if ( @$error_msgs ) {
+            push @results, @$error_msgs;
+            $checks_failure ||= 1;
+        }
+        $ARGS{ $field } = join ', ', grep defined, @$filtered_emails;
+    }
+}
+
+my $skip_create = 0;
+$m->callback( CallbackName => 'BeforeCreate', ARGSRef => \%ARGS, skip_create => \$skip_create, 
+        checks_failure => $checks_failure, checks_failure_ref => \$checks_failure, results => \@results );
+
+$m->comp( '/Articles/Elements/CheckSkipCreate', ARGSRef => \%ARGS, skip_create => \$skip_create,
+              checks_failure => $checks_failure, results => \@results );
+
+if ( !$reload_page && $checks_failure && ( grep { /SubmitTicket$/ && $ARGS{$_} } keys %ARGS ) && RT::Interface::Web::RequestENV('HTTP_HX_BOOSTED') ) {
+    $r->headers_out->{'HX-Trigger'} = JSON(
+        {
+            actionsChanged => { messages => \@results, isWarning => 1 },
+            validationFailed => [ GetInvalidFields( Object => RT::Ticket->new( $session{CurrentUser} ) ) ],
+        },
+        ascii => 1,
+    );
+    Abort( loc("Validation error"), Code => HTTP::Status::HTTP_UNPROCESSABLE_CONTENT );
+}
+
+if ( !$checks_failure && !$skip_create && grep { /SubmitTicket$/ && $ARGS{$_} } keys %ARGS ) {
+    $m->comp('Display.html', %ARGS);
+    $RT::Logger->crit("After display call; error is $@");
+    $m->abort();
+}
+</%INIT>
+
+<%ARGS>
+$DependsOn => undef
+$DependedOnBy => undef
+$MemberOf => undef
+$QuoteTransaction => undef
+$CloneTicket => undef
+$AddGroupCc => undef
+</%ARGS>

@@ -1,0 +1,251 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+% $r->content_type('application/json; charset=utf-8');
+<% JSON({
+    actions => \@Actions,
+}) |n %>
+% $m->abort;
+<%ARGS>
+$id
+</%ARGS>
+<%INIT>
+my @Actions;
+my $checks_failure = 0;
+my $TicketObj = LoadTicket($id);
+
+# fill ACL cache
+$TicketObj->CurrentUser->PrincipalObj->HasRights( Object => $TicketObj );
+my @events;
+my $old_layout;
+
+# Detect if this is an update from inline edit on the ticket display page
+my $ticket_display = ( RT::Interface::Web::RequestENV('HTTP_HX_CURRENT_URL') // '' ) =~ m{/Display.html};
+
+if ( $ticket_display ) {
+    $old_layout = GetPageLayout( Object => $TicketObj, Page => 'Display' );
+}
+
+$m->callback(CallbackName => 'ProcessArguments',
+             Ticket => $TicketObj,
+             ARGSRef => \%ARGS,
+             Actions => \@Actions,
+             Events  => \@events,
+         );
+
+my %squelched = ProcessTransactionSquelching( \%ARGS );
+$ARGS{'SquelchMailTo'} = [keys %squelched] if keys %squelched;
+my $gnupg_widget = $m->comp('/Elements/Crypt/SignEncryptWidget:new', Arguments => \%ARGS );
+$m->comp( '/Elements/Crypt/SignEncryptWidget:Process',
+    self => $gnupg_widget,
+    TicketObj => $TicketObj,
+);
+
+my ($status, @msg) = $m->comp(
+    '/Elements/ValidateCustomFields',
+    CustomFields => $TicketObj->TransactionCustomFields,
+    Object => RT::Transaction->new( $session{'CurrentUser'} ),
+    ARGSRef => \%ARGS
+);
+unless ( $status ) {
+    push @Actions, @msg;
+    $checks_failure = 1;
+}
+
+( $status, @msg ) = $m->comp(
+    '/Elements/ValidateCustomFields',
+    CustomFields => $TicketObj->CustomFields,
+    Object => $TicketObj,
+    ARGSRef => \%ARGS,
+);
+unless ( $status ) {
+    push @Actions, @msg;
+    $checks_failure = 1;
+}
+
+$status = $m->comp('/Elements/Crypt/SignEncryptWidget:Check',
+    self      => $gnupg_widget,
+    TicketObj => $TicketObj,
+);
+unless ( $status ) {
+    $checks_failure = 1;
+    push @Actions,
+        loc('RT was unable to encrypt or sign the outgoing email. Try again on the ticket update page to see details.');
+}
+
+( $status, @msg ) = PreprocessTimeUpdates( \%ARGS );
+unless ( $status ) {
+    push @Actions, @msg;
+    $checks_failure = 1;
+}
+
+if ( !$checks_failure ) {
+
+    # It's common to change owner and add a reply/comment in the same
+    # update. Process the owner change before the message update so the
+    # new owner will see the message if they only see notifications when
+    # they are the owner.
+    my @owner_changes = ProcessTicketOwnerUpdate(ARGSRef => \%ARGS, TicketObj => $TicketObj );
+
+    my @message_changes = ProcessUpdateMessage(
+        ARGSRef   => \%ARGS,
+        Actions   => \@Actions,
+        TicketObj => $TicketObj,
+    );
+
+    my @watchers_changes  = ProcessTicketWatchers( ARGSRef => \%ARGS, TicketObj => $TicketObj );
+    my @times_changes     = ProcessTicketTimes( ARGSRef => \%ARGS, TicketObj => $TicketObj );
+    my @basics_changes    = ProcessTicketBasics( ARGSRef => \%ARGS, TicketObj => $TicketObj );
+    my @description_changes = ProcessTicketDescription( ARGSRef => \%ARGS, TicketObj => $TicketObj );
+    my @links_changes     = ProcessTicketLinks( ARGSRef => \%ARGS, TicketObj => $TicketObj );
+    my @dates_changes     = ProcessTicketDates( ARGSRef => \%ARGS, TicketObj => $TicketObj );
+    my @cfs_changes       = ProcessObjectCustomFieldUpdates( ARGSRef => \%ARGS, Object => $TicketObj );
+    my @reminders_changes = ProcessTicketReminders( ARGSRef => \%ARGS, TicketObj => $TicketObj );
+
+    push @events, 'ticketOwnerChanged'        if @owner_changes;
+    push @events, 'ticketMessageChanged'      if @message_changes;
+    push @events, 'ticketWatchersChanged'     if @watchers_changes;
+    push @events, 'ticketTimesChanged'        if @times_changes;
+    push @events, 'ticketBasicsChanged'       if @basics_changes || @owner_changes;
+    push @events, 'ticketDescriptionChanged'  if @description_changes;
+    push @events, 'ticketLinksChanged'        if @links_changes;
+    push @events, 'ticketDatesChanged'        if @dates_changes;
+    push @events, 'ticketCustomFieldsChanged' if @cfs_changes;
+    push @events, 'ticketRemindersChanged'    if @reminders_changes;
+
+    push @Actions, @owner_changes, @message_changes, @watchers_changes, @times_changes, @basics_changes,
+        @description_changes, @links_changes, @dates_changes, @cfs_changes, @reminders_changes;
+
+    for my $txn (@{ $TicketObj->{_TransactionBatch} || [] }) {
+        if ( $txn->Type eq 'Set' ) {
+            push @events, 'ticket' . $txn->Field . 'Changed';
+            if ( $txn->Field eq 'Queue' ) {
+                push @events, 'mainContainerChanged';
+            }
+        }
+        elsif ( $txn->Type eq 'Status' ) {
+            push @events, 'ticketStatusChanged', 'ticketBasicsChanged';
+        }
+        elsif ( $txn->Type eq 'CustomField' ) {
+            push @events, 'customField-' . $txn->Field . 'Changed';
+        }
+        elsif ( $txn->Type =~ /(?:Add|Delete)Link/ ) {
+            if ( $txn->Field eq 'MergedInto' ) {
+                push @events, 'mainContainerChanged';
+            }
+            elsif ( ( $txn->OldValue // '' ) =~ m{^asset://} || ( $txn->NewValue // '' ) =~ m{^asset://} ) {
+                push @events, 'ticketAssetsChanged';
+            }
+        }
+        elsif ( $txn->Type =~ /(?:Add|Del|Set)Watcher/ ) {
+            push @events, 'ticket' . $txn->Field . 'Changed';
+        }
+    }
+
+    # TicketUpdate can be called from multiple places via inline edit, etc.
+    # Some operations are only for ticket display page updates.
+    if ( $ticket_display ) {
+
+        # On queue change, ticket display page layout can change
+        if ( $old_layout ne GetPageLayout( Object => $TicketObj, Page => 'Display' ) ) {
+            push @events, 'mainContainerChanged';
+        }
+        elsif ( my $article_fields = RT->Config->Get('ProcessArticleFields') ) {
+            my $queue_config = $article_fields->{ $TicketObj->QueueObj->__Value('Name') };
+            if ( $queue_config ) {
+                my $event;
+                if ( $queue_config->{Field} =~ /^CF\.(\{?)(.+)\1$/ ) {
+                    my $cf_name = $2;
+                    my $cfs = RT::CustomFields->new($session{CurrentUser});
+                    $cfs->LimitToQueue( $TicketObj->Queue );
+                    $cfs->Limit( FIELD => 'Name', VALUE => $cf_name, CASESENSITIVE => 0 );
+                    if ( my $cf = $cfs->Next ) {
+                        $event = 'customField-' . $cf->Id . 'Changed';
+                    }
+                }
+                else {
+                    $event = 'ticket' . $queue_config->{Field} . 'Changed';
+                }
+
+                if ( grep { $event eq $_ } @events ) {
+                    push @events, 'ticketArticleChanged';
+                }
+            }
+        }
+
+        # On the ticket display page, ticket updates can change the page menu.
+        # For example, if you change owner to yourself, we remove the Take entry.
+
+        my %page_menu_events = map { 'ticket' . $_ . 'Changed' => 1 } qw/Status Owner/,
+            RT->Config->Get('HideResolveActionsWithDependencies') ? 'Links' : ();
+        push @events, 'pageMenuChanged' if grep { $page_menu_events{$_} } @events;
+    }
+}
+
+$m->callback(
+    CallbackName => 'AfterProcessArguments',
+    Ticket       => $TicketObj,
+    ARGSRef      => \%ARGS,
+    Actions      => \@Actions,
+    Events       => \@events,
+    ChecksFailed => \$checks_failure,
+);
+
+$r->headers_out->{'HX-Trigger'} = JSON(
+    {
+        actionsChanged => { messages => \@Actions, isWarning => $checks_failure },
+        $checks_failure
+        ? ( validationFailed => [ GetInvalidFields( Object => $TicketObj ) ] )
+        : ( requestSucceeded => 1, ( !$ticket_display && @Actions ) ? ( collectionsChanged => { class => 'RT::Ticket', id => $TicketObj->Id } ) : () ),
+        map { $_ => '' } @events
+    },
+    ascii => 1,
+);
+
+Abort( loc("Validation error"), Code => HTTP::Status::HTTP_UNPROCESSABLE_CONTENT ) if $checks_failure;
+
+</%INIT>

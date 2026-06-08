@@ -1,0 +1,161 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<div class="titlebox body-content-class card<% $class ? " $class " : '' %><% $rolledup ? " rolled-up" : ""%>" id="<% $id %>"\
+% for my $key (keys %$data) {
+ data-<% $key %>="<% $data->{$key} %>"\
+% }
+>
+  <div class="titlebox-title card-header<% $title_class ? " $title_class" : ''%>">
+% if ($hideable) {
+    <span class="toggle <% $rolledup ? " collapsed" : ""%>" data-bs-toggle="collapse" data-bs-target="#<%$tid|n%>" title="<% loc('Toggle visibility') %>"></span>
+% }
+    <span class="left"><%
+            $title_href ? qq[<a href="$title_href">] : '' | n
+        %><% $title %><% $title_raw |n %><% $title_href ? "</a>" : '' |n%></span>
+% if ( $icons_ref && scalar @$icons_ref ) {   # Build 1 or more bordered icons on the right
+    <span class="right-icon">
+%   foreach my $icon ( @$icons_ref ) {
+%     if ( $icon->{dropdown_items} ) {
+    <span class="rt-inline-icon border rounded dropdown">
+      <a class="menu-item" href="#" alt="<% $icon->{tooltip_text} %>" aria-label="<% $icon->{tooltip_text} %>" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><% GetSVGImage(Name => $icon->{icon_name}, Title => $icon->{tooltip_text}) |n %></a>
+      <ul class="dropdown-menu dropdown-menu-end">
+%       for my $item ( @{$icon->{dropdown_items}} ) {
+        <li class="">
+          <a href="<% $item->{item_href} %>" id="<% $item->{item_id} %>" class="dropdown-item <% $item->{item_class} %>"
+% if ( $item->{item_onclick} ) {
+      onclick="<% $item->{item_onclick} %>"
+% }
+% if ( $item->{htmx_get} ) {
+      hx-get="<% $item->{htmx_get} %>"
+% }
+% if ( $item->{htmx_target} ) {
+      hx-target="<% $item->{htmx_target} %>"
+% }
+% if ( $item->{htmx_indicator} ) {
+      hx-indicator="<% $item->{htmx_indicator} %>"
+% }
+          ><% $item->{item_text} %></a>
+        </li>
+%       }
+      </ul>
+    </span>
+%     } else {
+    <span class="rt-inline-icon border rounded <% $icon->{class} // '' %>" <% $icon->{modal} ? qq{data-bs-toggle="modal" data-bs-target="$icon->{modal}"} : '' |n %> >
+      <a class="menu-item" data-bs-toggle="tooltip" aria-label="<% $icon->{tooltip_text} %>" data-bs-title="<% $icon->{tooltip_text} %>" href="<% $icon->{icon_href} %>" alt="<% $icon->{tooltip_text} %>" aria-haspopup="false" aria-expanded="false"
+% if ( $icon->{htmx_get} ) {
+      hx-get="<% $icon->{htmx_get} %>"
+% }
+% if ( $icon->{htmx_target} ) {
+      hx-target="<% $icon->{htmx_target} %>"
+% }
+% if ( $icon->{htmx_indicator} ) {
+      hx-indicator="<% $icon->{htmx_indicator} %>"
+% }
+      ><% GetSVGImage(Name => $icon->{icon_name}, Title => $icon->{tooltip_text}) |n %></a>
+    </span>
+%     }
+%   }
+    </span>
+% } else {
+    <span class="right<%($titleright_href || $titleright || $titleright_raw) ? '' : '-empty' %>">\
+        <% $titleright_href ? qq[<a href="$titleright_href">] : '' | n %>\
+        <% $titleright  %><% $titleright_raw |n%><% $titleright_href ? "</a>" : '' |n%>\
+    </span>
+% }
+  </div>
+  <div class="titlebox-content collapse <% $bodyclass %><% $rolledup ? "" : " show"%><% " $content_class" || '' %>" id="<% $tid %>">
+    <div class="card-body <% $content_body_class %>">
+<%ARGS>
+$class => ''
+$bodyclass => ''
+$title_href => ''
+$title => ''
+$title_raw => ''
+$title_class => ''
+$titleright_href => ''
+$titleright => ''
+$titleright_raw => ''
+$id => ''
+$hideable => 1
+$rolledup => 0
+$data => {}
+$content_class => ''
+$content_body_class => ''
+$icons_ref => undef
+</%ARGS>
+
+<%init>
+
+# $icons_ref expects a reference to an array of hashes that look like this:
+# @icon_links = ({
+#    icon_name => 'gear',
+#    tooltip_text => loc('Edit'),
+#    icon_href => RT->Config->Get('WebPath').'/Dashboards/index.html'
+#    class => 'edit-item',
+#    modal => '#some-modal-id',
+#});
+
+$hideable = 1 if $rolledup;
+#
+# This should be pretty bulletproof
+#
+my $page = $m->request_comp->path;
+
+my $title_b64 = MIME::Base64::encode_base64(Encode::encode( "UTF-8", $title), '');
+
+my $tid  = "TitleBox--$page--" .
+            join '--', ($class, $bodyclass, $title_b64, $id);
+
+# Replace anything that ISN'T alphanumeric, a hyphen, or an underscore
+$tid =~ s{[^A-Za-z0-9\-_]}{_}g;
+
+my $i = 0;
+$i++ while $m->notes("$tid-$i");
+$m->notes("$tid-$i" => 1);
+$tid = "$tid-$i";
+</%init>

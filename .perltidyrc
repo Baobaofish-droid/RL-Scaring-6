@@ -1,0 +1,6 @@
+--perl-best-practices
+--extended-continuation-indentation
+--maximum-line-length=120
+--closing-token-indentation=1
+--nospace-for-semicolon
+--no-outdent-long-quotes

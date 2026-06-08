@@ -1,0 +1,148 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+% if ( $error ) {
+<& /Elements/ModalError, Message => $error &>
+% } else {
+<div class="modal-dialog modal-dialog-centered" role="document">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h5 class="modal-title"><&|/l&>Saved Search Options</&></h5>
+      <a href="javascript:void(0)" class="close" data-bs-dismiss="modal" aria-label="Close">
+        <span aria-hidden="true">&times;</span>
+      </a>
+    </div>
+    <div class="modal-body">
+    <form method="post" hx-swap="none" hx-post="<% RT->Config->Get('WebPath') %>/Helpers/SavedSearchOptions" name="SavedSearchOptions" id="SavedSearchOptions">
+      <input type="hidden" class="hidden" name="SavedSearchId" value="<% $SavedSearchId %>">
+% if ( $search->Type eq 'Ticket' ) {
+      <&| /Elements/LabeledValue, Label => loc("Display As"), LabelFor => "SearchDisplayMode", ReadOnly => 0 &>
+        <& /Elements/SearchDisplayMode, Name => 'SearchDisplayMode', SavedSearch => 1,
+           Default => ( $search->GetOption('SearchDisplayMode') || '' ) &>
+      </&>
+      <div id="calendar-color-mode-row" class="<% $is_calendar ? '' : 'd-none' %>">
+      <&| /Elements/LabeledValue, Label => loc("Color Events By"), LabelFor => "CalendarColorMode", ReadOnly => 0 &>
+        <& /Elements/SelectCalendarColorMode, Name => 'CalendarColorMode',
+           Default => ( $search->GetOption('CalendarColorMode') || 'date' ) &>
+      </&>
+      </div>
+      <script>
+        document.querySelector('select[name="SearchDisplayMode"]').addEventListener('change', function() {
+          document.getElementById('calendar-color-mode-row').classList.toggle('d-none', this.value !== 'Calendar');
+        });
+      </script>
+% }
+      <&| /Elements/LabeledValue, Label => loc("Automatic Refresh"), LabelFor => "SearchRefreshInterval", ReadOnly => 0 &>
+        <& /Elements/Refresh, Name => 'SearchRefreshInterval', SavedSearch => 1,
+           Default => ( $search->GetOption('SearchRefreshInterval') || '' ) &>
+      </&>
+% $m->callback( CallbackName => 'InFormElement', %ARGS, SavedSearchObj => $search );
+      <div class="row mt-2 justify-content-end">
+        <div class="col-auto">
+          <& /Elements/Submit, Label => loc('Save'), Name => 'SavedSearchOptionsSave', Attributes => q{data-bs-dismiss="modal"} &>
+        </div>
+      </div>
+    </form>
+    </div>
+  </div>
+</div>
+% }
+
+% $m->abort;
+<%init>
+my $error;
+my $search;
+my @search_option_args = qw( SearchRefreshInterval SearchDisplayMode CalendarColorMode );
+
+if ( $SavedSearchId ) {
+    $search = RT::SavedSearch->new( $session{'CurrentUser'} );
+    $search->Load( $SavedSearchId );
+
+    $m->callback( CallbackName => 'Initial', %ARGS, SavedSearchObj => $search, SearchOptionsRef => \@search_option_args );
+
+    if ( $search->Id ) {
+        if ( $search->CurrentUserCanModify ) {
+            foreach my $search_option ( @search_option_args ) {
+                if ( $ARGS{$search_option} ) {
+                    my ( $ok, $msg ) = $search->SetOption( $search_option, $ARGS{$search_option} );
+
+                    if ($ok) {
+                        $r->headers_out->{'HX-Trigger'} = JSON(
+                            {
+                                actionsChanged => [
+                                    loc('Saved search options updated')
+                                ],
+                            },
+                            ascii => 1,
+                        );
+                    }
+                    else {
+                        RT->Logger->error(
+                            "Unable to update $search_option from $ARGS{$search_option}: $msg"
+                        );
+                        $r->headers_out->{'HX-Trigger'} = JSON( { actionsChanged => [$msg], }, ascii => 1, );
+                    }
+                }
+            }
+        }
+        else {
+            $error = loc("No permission to modify search");
+        }
+    }
+    else {
+        $error = loc("Unable to load search");
+    }
+}
+else {
+    $error = loc("No saved search id provided");
+}
+
+my $is_calendar = $search && ( $search->GetOption('SearchDisplayMode') || '' ) eq 'Calendar';
+</%init>
+<%args>
+$SavedSearchId => undef
+</%args>

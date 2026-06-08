@@ -1,0 +1,187 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+% if ($FullWidth) {
+<div class="row mt-2">
+  <div class="col-12">
+% }
+<textarea autocomplete="off" class="form-control messagebox <% $Type eq 'text/html' ? 'richtext' : '' %>" <% $SuppressAttachmentWarning ? 'suppress-attachment-warning' : '' %> <% $width_attr %>="<% $Width %>" rows="<% $Height %>" <% $wrap_type |n %> name="<% $Name %>" id="<% $Name %>" placeholder="<% $Placeholder %>">
+% $m->comp('/Articles/Elements/IncludeArticle', %ARGS, IncludeArticleId => $article_id, QueueObj => $QueueObj) if $IncludeArticle;
+% $m->callback( %ARGS, SignatureRef => \$signature, DefaultRef => \$Default, MessageRef => \$message );
+% if (RT->Config->Get("SignatureAboveQuote", $session{'CurrentUser'})) {
+<% $Default || '' %><% $signature %><% $message %></textarea>
+% }
+% else {
+<% $Default || '' %><% $message %><% $signature %></textarea>
+% }
+
+% $m->callback( %ARGS, CallbackName => 'AfterTextArea' );
+
+% if (!$SuppressAttachmentWarning) {
+% $m->comp('/Elements/AttachmentWarning', QuotedMessage => $message, Signature => $signature, %ARGS);
+% }
+
+% if ($Type eq 'text/html') {
+<input type="text" style="display:none" name="<% $Name %>Type" id="<% $Name %>Type" value="<% $m->request_args->{$Name."Type"}||$Type %>" />
+% }
+
+% if ($FullWidth) {
+  </div>
+</div>
+% }
+<%INIT>
+
+my $message = '';
+
+if ( $QuoteTransaction ) {
+    my $transaction = RT::Transaction->new( $session{'CurrentUser'} );
+    $transaction->Load( $QuoteTransaction );
+
+    if ( $transaction->Id && !$QuoteContent ) {
+        $message = $transaction->Content( Quote => 1, Type => $Type );
+        # Convert cid: images to links so they can be rendered.
+        if ( $Type eq 'text/html' && $message && $transaction->ObjectType eq 'RT::Ticket' ) {
+            RT::Interface::Web::RewriteInlineImages(
+                Content        => \$message,
+                Attachment     => $transaction->ContentObj( Type => $Type ) || undef,
+                AttachmentPath => join( '/',
+                    RT->Config->Get('WebPath'), $session{CurrentUser}->Privileged ? 'Ticket' : 'SelfService',
+                    'Attachment' ),
+            );
+        }
+    }
+    else {
+        $message = RT::Transaction->QuoteContent(
+            Type        => $Type,
+            Content     => $QuoteContent,
+            $transaction->Id ? ( QuoteHeader => $transaction->QuoteHeader ) : (),
+        );
+    }
+}
+elsif ( $QuoteContent ) {
+    $message = RT::Transaction->QuoteContent(
+        Type        => $Type,
+        Content     => $QuoteContent,
+    );
+}
+
+my $signature = $session{'CurrentUser'}->UserObj->Signature // "";
+if ( $IncludeSignature and $signature =~ /\S/ ) {
+    $signature =~ s/\n*$//;
+
+    if ($Type eq 'text/html') {
+        # only transform the signature if it doesn't look like HTML
+        if ($signature !~ /<.{1,5}>/) {
+            $signature =~ s/&/&amp;/g;
+            $signature =~ s/</&lt;/g;
+            $signature =~ s/>/&gt;/g;
+            $signature =~ s/"/&quot;/g;  # "//;
+            $signature =~ s/'/&#39;/g;   # '//;
+            $signature =~ s{\n}{<br />}g;
+            $signature = "<p>&nbsp;</p><p>--&nbsp;<br />$signature</p>";
+        }
+        else {
+            $signature = "<p>&nbsp;</p><p>--&nbsp;</p>$signature";
+        }
+    } else {
+        # only transform the signature if it *does* look like HTML
+        if ($signature =~ /<.{1,5}>/) {
+            $signature = RT::Interface::Email::ConvertHTMLToText($signature);
+        }
+        $signature = "\n\n-- \n". $signature . "\n";
+    }
+
+    if ($message =~ /\S/) {
+        if (RT->Config->Get('SignatureAboveQuote', $session{CurrentUser})) {
+            $signature .= $Type eq 'text/html' ? "<p>&nbsp;</p>" : "\n";
+        } else {
+            $signature = ($Type eq 'text/html' ? "" : "\n") . $signature;
+        }
+    }
+} else {
+    $signature = '';
+}
+
+my $article_id;
+if ( $IncludeDefaultArticle && defined $QueueObj && $QueueObj->Id ) {
+    # Load a default article
+    $article_id = $QueueObj->DefaultValue('Article') if $QueueObj->DefaultValue('Article');
+}
+else {
+    # Load from the page, if provided
+    $article_id = $ARGS{'IncludeArticleId'} if $ARGS{'IncludeArticleId'};
+}
+
+# wrap="something" seems to really break IE + richtext
+my $wrap_type = $Type eq 'text/html' ? '' : 'wrap="soft"';
+
+# If there's no cols specified, we want to set the width to 100% in CSS
+my $width_attr;
+if ($Width) {
+    $width_attr = 'cols';
+} else {
+    $width_attr = 'style';
+    $Width = 'width: 100%';
+}
+
+</%INIT>
+<%ARGS>
+$QuoteTransaction          => undef
+$QuoteContent              => undef
+$Name                      => 'Content'
+$Default                   => ''
+$Width                     => RT->Config->Get('MessageBoxWidth', $session{'CurrentUser'} )
+$Height                    => RT->Config->Get('MessageBoxHeight', $session{'CurrentUser'} ) || 15
+$IncludeSignature          => RT->Config->Get('MessageBoxIncludeSignature');
+$IncludeArticle            => 1;
+$Type                      => RT->Config->Get('MessageBoxRichText',  $session{'CurrentUser'}) ? 'text/html' : 'text/plain';
+$SuppressAttachmentWarning => 0
+$Placeholder               => loc('Type your message here')
+$IncludeDefaultArticle     => 0  # Preload a default article based on queue settings
+$QueueObj                  => undef
+$FullWidth                 => undef
+</%ARGS>

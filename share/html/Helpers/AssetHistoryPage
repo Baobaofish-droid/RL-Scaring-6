@@ -1,0 +1,182 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%ARGS>
+$id
+$oldestTransactionsFirst => RT->Config->Get("OldestTransactionsFirst", $session{CurrentUser});
+$lastTransactionId => undef
+$focusTransactionId => undef
+$loadAll => 0
+$mode => 'append'
+@FilterTxnTypes => ()
+$ReverseTxns => undef
+$Page => undef
+$PerPage => undef
+$ShowPagination => 0
+</%ARGS>
+<%INIT>
+my $AssetObj = RT::Asset->new($session{'CurrentUser'});
+$AssetObj->Load($id);
+
+my %extra_args;
+$m->callback(
+    CallbackName => 'ExtraShowHistoryArguments',
+    Asset => $AssetObj,
+    ExtraArgs => \%extra_args
+);
+
+my $transactions;
+# Use ReverseTxns parameter if provided, otherwise use the oldestTransactionsFirst setting
+my $order;
+if (defined $ReverseTxns) {
+    $order = $ReverseTxns eq 'ASC' ? 'ASC' : 'DESC';
+    $oldestTransactionsFirst = $ReverseTxns eq 'ASC' ? 1 : 0;
+} else {
+    $order = $oldestTransactionsFirst ? 'ASC' : 'DESC';
+}
+
+# Use the standard asset transactions collection
+$transactions = $AssetObj->Transactions;
+
+# Apply transaction type filter if provided
+if (@FilterTxnTypes) {
+    $transactions->Limit(
+        FIELD    => 'Type',
+        OPERATOR => 'IN',
+        VALUE    => \@FilterTxnTypes
+    );
+}
+elsif ( $ARGS{'FilterTxnTypes-Magic'} ) {
+    $transactions->Limit(
+        FIELD      => 'Type',
+        OPERATOR   => 'IS',
+        VALUE      => 'NULL',
+        QUOTEVALUE => 0,
+    );
+}
+
+# Apply common filters and ordering
+if ($lastTransactionId) {
+    $transactions->Limit(
+        FIELD    => 'id',
+        OPERATOR => $mode eq 'prepend' || $oldestTransactionsFirst ? '>' : '<',
+        VALUE    => $lastTransactionId
+    );
+}
+$transactions->OrderByCols(
+    { FIELD => 'Created',   ORDER => $order },
+    { FIELD => 'id',        ORDER => $order },
+);
+# Handle pagination parameters
+my $total_transactions_count;
+my $total_pages;
+if ($ShowPagination && defined $Page) {
+    # Use configured default or fallback if not set
+    $PerPage ||= RT->Config->Get('HistoryPerPage') || 10;
+
+    # Calculate total count for pagination BEFORE applying pagination limits
+    $total_transactions_count = $transactions->CountAll;
+    $total_pages = int(($total_transactions_count + $PerPage - 1) / $PerPage);
+
+    # Validate and adjust page number
+    $Page = 1 unless $Page =~ /\A\d+\z/ && $Page > 1;
+    $Page = $total_pages if $Page > $total_pages && $total_pages > 0;
+
+    # Apply pagination to collection (RT uses 0-based page indexing internally)
+    $transactions->RowsPerPage($PerPage);
+    $transactions->GotoPage($Page - 1);
+} elsif ($focusTransactionId) { # make sure we load enough if we need to focus a transaction
+    $transactions->Limit(
+        FIELD    => 'id',
+        OPERATOR => $oldestTransactionsFirst ? '<=' : '>=',
+        VALUE    => $focusTransactionId
+    );
+} elsif (!$loadAll) { # otherwise, just load the standard page of 10 transactions
+    $transactions->RowsPerPage(10);
+    $transactions->FirstPage();
+}
+</%INIT>
+<%perl>
+if ($ShowPagination && defined $Page) {
+
+    $m->comp('/Elements/ShowHistoryPage',
+        Object => $AssetObj,
+        Transactions => $transactions,
+        %extra_args,
+    );
+
+    # Add pagination controls if there are multiple pages
+    if ($total_pages > 1) {
+        my %url_params = map { $_ => $ARGS{$_} } grep { defined $ARGS{$_} && !blessed $ARGS{$_} } keys %ARGS;
+        $url_params{ShowPagination} = 1;
+
+        my $base_url = RT->Config->Get('WebPath') . "/Helpers/AssetHistoryPage";
+
+        $m->comp('/Elements/CollectionListPaging',
+            BaseURL => $base_url,
+            Rows => $PerPage,
+            TotalFound => $total_transactions_count,
+            CurrentPage => $Page,
+            Pages => $total_pages,
+            URLParams => \%url_params,
+            PageParam => 'Page',
+            UseHtmx => 1,
+            HtmxTarget => '.history-container',
+            HtmxSwap => 'innerHTML show:.row:has(.history-container):top',
+        );
+    }
+
+} else {
+    $m->comp('/Elements/ShowHistoryPage',
+        Object => $AssetObj,
+        Transactions => $transactions,
+        %extra_args,
+    );
+}
+</%perl>
+
+% $m->abort();

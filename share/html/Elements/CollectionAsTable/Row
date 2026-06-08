@@ -1,0 +1,244 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%ARGS>
+$i => undef
+@Format => undef
+$record => undef
+$maxitems => undef
+$Depth => undef
+$Warning => undef
+$ColumnMap => {}
+$Class     => 'RT::Tickets'
+$Classes => ''
+$InlineEdit => 0
+</%ARGS>
+<%init>
+
+my $column_map_class;
+if ( $Class =~ /::/ ) {
+    $column_map_class = $Class->ColumnMapClassName;
+}
+else {
+    $column_map_class = $Class;
+}
+
+$m->out(  '<tr class="list-item ' . $m->interp->apply_escapes($Classes, 'h') . ' '
+        . ( $Warning ? 'warnline' : '' ) . '" '
+        . 'data-index="'.$m->interp->apply_escapes($i, 'h').'" ' . ( $record->can('id') ? ' data-record-id="'.$record->id.'"' : '' )
+        . ( $Warning ? ' data-warning=1' : '')
+        . ' >' . "\n" );
+my $item = 0;
+my $inner_row = 0;
+my @row_content;
+my @row_colspan;  # Track colspan for each column, indexed by $item
+foreach my $column (@Format) {
+    if ( defined $column->{title} && $column->{title} eq 'NEWLINE' ) {
+        while ( $item < $maxitems ) {
+            $row_content[$item][$inner_row] .= '<div class="collection-as-table">&nbsp;</div>';
+            $item++;
+        }
+        $item = 0;
+        $inner_row++;
+        next;
+    }
+
+    my $class = $column->{class} ? $m->interp->apply_escapes($column->{class}, 'h') : 'collection-as-table';
+
+    my %attrs;
+    my @possible_attrs = qw(style align);
+    if (
+        $InlineEdit
+        && (   $record->isa('RT::Ticket') && $record->CurrentUserHasRight('ModifyTicket')
+            || $record->isa('RT::Asset') && $record->CurrentUserHasRight('ModifyAsset') )
+        )
+    {
+        push( @possible_attrs, 'edit' );
+    }
+
+    foreach my $attr (@possible_attrs) {
+        if ( defined $column->{ $attr } ) {
+            $attrs{ $attr } = $column->{ $attr };
+            next;
+        }
+
+        # if it's not defined then use column map
+        my $col = $column->{'attribute'} || $column->{'last_attribute'};
+        unless ( exists $ColumnMap->{$col}{$attr} ) {
+            next unless $col;
+
+            $ColumnMap->{$col}{$attr} = $m->comp(
+                "/Elements/ColumnMap",
+                Class => $column_map_class,
+                Name  => $col,
+                Attr  => $attr,
+            );
+        }
+        $attrs{ $attr } = ProcessColumnMapValue(
+            $ColumnMap->{$col}{$attr},
+            Arguments => [$record, $i],
+            Escape => 0,
+        );
+    }
+
+    $attrs{colspan} = $column->{span};
+
+    # Store colspan for later application to <td>
+    $row_colspan[$item] = $attrs{colspan} if $attrs{colspan};
+
+    if ($attrs{edit}) {
+        $class .= ' editable';
+    }
+
+    # Convert align value to Bootstrap 5 text alignment class
+    if ($attrs{align}) {
+        if ($attrs{align} eq 'left') {
+            $class .= ' text-start';
+        } elsif ($attrs{align} eq 'center') {
+            $class .= ' text-center';
+        } elsif ($attrs{align} eq 'right') {
+            $class .= ' text-end';
+        }
+    }
+
+    my @out;
+    foreach my $subcol ( @{ $column->{output} } ) {
+        my ($col) = ($subcol =~ /^__(.*?)__$/);
+        unless ( $col ) {
+            push @out, $subcol;
+            next;
+        }
+
+        unless ( exists $ColumnMap->{$col}{'value'} ) {
+            $ColumnMap->{$col}{'value'} = $m->comp(
+                "/Elements/ColumnMap",
+                Class => $column_map_class,
+                Name  => $col,
+                Attr  => 'value'
+            );
+        }
+
+        push @out, ProcessColumnMapValue(
+            $ColumnMap->{$col}{'value'},
+            Arguments => [$record, $i],
+        );
+    }
+
+    $m->callback(
+        CallbackName => 'EachField',
+        Record       => $record,
+        Format       => \@Format,
+        Column       => $column,
+        Classes      => \$class,
+        Align        => \$attrs{align},
+        Style        => \$attrs{style},
+        Colspan      => \$attrs{colspan},
+        Edit         => \$attrs{edit},
+        Out          => \@out,
+    );
+
+    $row_content[$item][$inner_row] .= qq{<div class="$class" };
+    $row_content[$item][$inner_row] .=  $_ .'="'. $m->interp->apply_escapes( $attrs{$_} => 'h' ) .'"'
+        foreach grep $attrs{$_}, qw(style);
+
+    $row_content[$item][$inner_row] .= '>';
+
+    if ( $attrs{edit} ) {
+        my $helper_name = $record->isa('RT::Ticket') ? 'TicketUpdate' : 'AssetUpdate';
+        $row_content[$item][$inner_row] .=  '<form hx-swap="none" hx-post="' . RT->Config->Get('WebPath') . "/Helpers/$helper_name?id=" . $record->id . '" class="editor" autocomplete="off">';
+        $row_content[$item][$inner_row] .=  $attrs{edit};
+        $row_content[$item][$inner_row]
+            .= GetSVGImage( Name => 'close-circle', ExtraClasses => 'cancel text-danger', Title => loc('Cancel') );
+        $row_content[$item][$inner_row]
+            .= GetSVGImage( Name => 'check-circle', ExtraClasses => 'submit text-success', Title => loc('Save') );
+        $row_content[$item][$inner_row] .= '<div class="spinner-border spinner-border-sm loading" role="status"></div>';
+        $row_content[$item][$inner_row] .= '</form>';
+        $row_content[$item][$inner_row] .= '<div class="value"><span>';
+    }
+
+    my $inner_content = join '', grep defined, @out;
+    $inner_content = '&nbsp;' unless length $inner_content;
+    $row_content[$item][$inner_row] .= $inner_content;
+
+    if ( $attrs{edit} ) {
+        $row_content[$item][$inner_row]
+            .= '</span> '
+            . GetSVGImage( Name => 'pencil', ExtraClasses => 'edit-icon', Title => loc('Edit') )
+            . '</div>';
+    }
+
+    $row_content[$item][$inner_row] .= '</div>';
+    $item += ($attrs{'colspan'} || 1);
+}
+
+# Fill up the last row, like how NEWLINE is handled above
+while ( $item < $maxitems ) {
+    $row_content[$item][$inner_row] .= '<div class="collection-as-table">&nbsp;</div>';
+    $item++;
+}
+# Now build our tds, with divs for the columns with multiple values
+for my $col_idx ( 0 .. $#row_content ) {
+    my $col = $row_content[$col_idx];
+    next unless $col;
+
+    $m->out('<td class="collection-as-table"');
+
+    # Apply colspan if this column has one
+    if ( $row_colspan[$col_idx] ) {
+        $m->out(' colspan="' . $m->interp->apply_escapes($row_colspan[$col_idx], 'h') . '"');
+    }
+
+    $m->out('>');
+
+    foreach my $cell ( @$col ) {
+        $m->out($cell);
+    }
+    $m->out('</td>');
+}
+
+$m->out('</tr>');
+</%init>

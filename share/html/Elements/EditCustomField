@@ -1,0 +1,238 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+% if ( $ShowLabel ) {
+<&| /Elements/LabeledValue,
+        Label => ( $Label ? $Label : $CustomField->Name ),
+        LabelFor => $Name,
+        LabelTooltip => $CustomField->EntryHint,
+        FormText => $FormText &>
+<& SELF:Content, %ARGS, Name => $Name, Default => $Default, CFHintId => $CFHintId &>
+</&>
+% } else {
+<& SELF:Content, %ARGS, Name => $Name, Default => $Default, CFHintId => $CFHintId &>
+% }
+
+<%INIT>
+my $Type = $CustomField->Type;
+unless ( $Type ) {
+    # Type is required, bail if we can't get it
+    RT->Logger->error( "Unable to load a type for Custom field #". $CustomField->id );
+    return;
+}
+
+$Grouping =~ s/\W//g if $Grouping;
+my $Name;
+if ( !$NamePrefix ) {
+    $Name = GetCustomFieldInputName(Object => $Object, CustomField => $CustomField, Grouping => $Grouping );
+}
+
+my $CFHintId;
+my $cf_name_prefix = GetCustomFieldInputNamePrefix(Object => $Object, CustomField => $CustomField, Grouping => $Grouping );
+
+if ($ShowHints and $CustomField->FriendlyPattern) {
+    $CFHintId = $cf_name_prefix . 'Hint';
+}
+
+# Always fill $Default with submited values if it's empty
+if ( ( !defined $Default || !length $Default ) && $DefaultsFromTopArguments ) {
+    my %TOP = %$DECODED_ARGS;
+    $Default = $TOP{ $Name } if $Name;
+    # check both -Values and -Value for back compatibility
+    if ( $NamePrefix ) {
+        $Default //= $TOP{ $NamePrefix . $CustomField->Id . '-Values' }
+            // $TOP{ $NamePrefix . $CustomField->Id . '-Value' };
+    }
+    else {
+        $Default //= $TOP{ $cf_name_prefix . 'Values' } // $TOP{ $cf_name_prefix . 'Value' };
+    }
+}
+
+if ( (!$Object || !$Object->id) && ( !defined $Default || !length $Default ) && $CustomField->SupportDefaultValues ) {
+    my ( $on ) = grep {$_->isa($CustomField->RecordClassFromLookupType)} $CustomField->ACLEquivalenceObjects;
+    $Default = $CustomField->DefaultValues(Object => $on || RT->System);
+}
+
+my $FormText;
+if ( $Type eq 'Date' || $Type eq 'DateTime' ) {
+    my $DateObj = RT::Date->new ( $session{'CurrentUser'} );
+    $DateObj->Set( Format => 'unknown', Value => $Default, Timezone => 'utc' );
+    $FormText = $DateObj->AsString(Time => $Type eq 'Date' ? 0 : 1, Timezone => 'utc');
+}
+
+</%INIT>
+<%ARGS>
+$Grouping    => undef
+$Object      => undef
+$CustomField => undef
+$Label       => undef
+$NamePrefix  => undef
+$Rows        => 5
+$Cols        => undef
+$Default     => undef
+$DefaultsFromTopArguments => 1
+$ShowHints   => undef
+$ShowLabel   => 1
+</%ARGS>
+
+<%METHOD Content>
+
+<%ARGS>
+$Grouping    => undef
+$Object      => undef
+$CustomField => undef
+$Label       => undef
+$NamePrefix  => undef
+$Rows        => 5
+$Cols        => undef
+$Default     => undef
+$DefaultsFromTopArguments => 1
+$ShowHints   => undef
+$Name        => undef
+$CFHintId    => undef
+</%ARGS>
+<%perl>
+$m->comp(
+    $EditComponent,
+    %ARGS,
+    Rows => $Rows,
+    Cols => $Cols,
+    Default => $Default,
+    Object => $Object,
+    Values => $Values,
+    MaxValues => $MaxValues,
+    Multiple => ($MaxValues != 1),
+    NamePrefix => $NamePrefix,
+    CustomField => $CustomField,
+    Name => $Name,
+    $CustomField->BasedOn && $Name ? ( BasedOnName => GetCustomFieldInputName(Object => $Object, CustomField => $CustomField->BasedOnObj, Grouping => $Grouping) ) : (),
+    DescribedBy => $CFHintId,
+    AddClass => $AddClass,
+);
+
+if ( $error_msg ) {
+</%perl>
+    <span id="<% $CFHintId %>" class="form-text invalid-feedback cfinvalidfield d-inline-block"><% $error_msg %></span>
+%  } elsif ($ShowHints and $CustomField->FriendlyPattern) {
+%   my $pattern              = $CustomField->Pattern;
+%   my $pattern_allows_empty = '' =~ m/$pattern/ ? 1 : 0;
+    <span id="<% $CFHintId %>" class="form-text cfhints d-inline-block<% $pattern_allows_empty ? '' : ' required' %>">
+      <% $CustomField->FriendlyPattern %>
+    </span>
+%  }
+% $m->callback( CallbackName => 'AfterCustomFieldValue', CallbackPage => '/Elements/EditCustomField', CustomField => $CustomField, Object => $Object, Grouping => $Grouping );
+
+% # AfterCustomFieldValue was moved from /Elements/EditCustomFields. To be removed in the future.
+% # Use the new path for this template instead.
+% $m->callback( CallbackName => 'AfterCustomFieldValue', CallbackPage => '/Elements/EditCustomFields', CustomField => $CustomField, Object => $Object, Grouping => $Grouping );
+
+<%INIT>
+my $Type = $CustomField->Type;
+my $Values;
+
+if ( $Object ) {
+    if ( $Object->Id ) {
+        $Values = $Object->CustomFieldValues( $CustomField->id );
+        $Values->Columns(
+            qw( id CustomField ObjectType ObjectId Disabled Content
+            ContentType ContentEncoding SortOrder Creator Created
+            LastUpdatedBy LastUpdated )
+        );
+        # Don't take care of $Values if there isn't values inside
+        undef ( $Values ) unless ( $Values->Count );
+    }
+}
+
+my $MaxValues = $CustomField->MaxValues;
+if ($MaxValues == 1 && $Values) {
+    # what exactly is this doing?  Without the "unless" it breaks RTFM
+    # transaction extraction into articles.
+    unless ( $Default ) {
+        if ( $Values->First ) {
+            if ( $CustomField->Type eq 'DateTime' ) {
+                my $date = RT::Date->new($session{CurrentUser});
+                $date->Set(Format => 'ISO', Value => $Values->First->Content);
+                $Default = $date->ISO(Timezone => 'user');
+            }
+            else {
+                $Default = $Values->First->Content;
+            }
+        }
+        else {
+            $Default = '';
+        }
+    }
+    $Values->GotoFirstItem;
+}
+# The "Magic" hidden input causes RT to know that we were trying to edit the field, even if 
+# we don't see a value later, since browsers aren't compelled to submit empty form fields
+$m->out("\n".'<input type="hidden" class="hidden" name="'
+        . ($Name ? $m->interp->apply_escapes($Name, 'h') : $m->interp->apply_escapes($NamePrefix, 'h').$CustomField->Id.'-Values')
+        . '-Magic" value="1" />'."\n");
+
+# Just show hints for user cfs that will be set from external sources on create
+if ( RT->Config->Get('ExternalInfoPriority') && $Object && $Object->isa('RT::User') && !$Object->Id ) {
+    for my $source ( @{RT->Config->Get('ExternalInfoPriority')} ) {
+        if ( RT->Config->Get('ExternalSettings')->{$source}{attr_map}{'UserCF.'.$CustomField->Name} ) {
+            $Type = 'Display';
+            $Default = loc('Set from external source');
+            last;
+        }
+    }
+}
+
+my ($error_msg, $AddClass);
+if ( $m->notes('InvalidField-' . $CustomField->Id . ($Grouping ? "-$Grouping" : '') ) ) {
+    $error_msg = $m->notes( 'InvalidField-' . $CustomField->Id . ($Grouping ? "-$Grouping" : '') );
+    $AddClass = 'is-invalid';
+}
+
+my $EditComponent = "EditCustomField$Type";
+$m->callback( %ARGS, CallbackName => 'EditComponentName', CallbackPage => '/Elements/EditCustomField', Name => \$EditComponent, CustomField => $CustomField, Object => $Object, Rows => \$Rows, Cols => \$Cols);
+$EditComponent = "EditCustomField$Type" unless $m->comp_exists($EditComponent);
+</%INIT>
+</%METHOD>

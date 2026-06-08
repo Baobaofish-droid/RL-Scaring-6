@@ -1,0 +1,9 @@
+.record .record-field .label {
+    display: inline-block;
+    font-weight: bold;
+    text-align: right;
+}
+
+.record .record-field .value {
+    display: inline-block;
+}

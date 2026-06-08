@@ -1,0 +1,195 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<div class="edit-columns">
+
+  <div class="d-none d-md-block">
+    <div class="row mt-2 text-center">
+      <div class="col-3"><&|/l&>Add Columns</&></div>
+      <div class="col-3"><&|/l&>Format</&></div>
+      <div class="col-1"></div>
+      <div class="col-4"><&|/l&>Show Columns</&></div>
+    </div>
+  </div>
+
+<script type="text/javascript">
+jQuery( function() {
+    jQuery('[name=AddCol], [name=RemoveCol], [name=ColUp], [name=ColDown]').click( function() {
+        var name = jQuery(this).attr('name');
+        var form = jQuery(this).closest('form');
+
+        jQuery.ajax({
+            url: '<% RT->Config->Get('WebPath') %>/Helpers/BuildFormatString?' + name + '=1',
+            method: 'POST',
+            data: form.serialize(),
+            success: function (data) {
+                if ( data.status == 'success' ) {
+                    form.find('input[name=Format]').val(data.Format);
+                    form.find('select[name=CurrentDisplayColumns]').html(data.CurrentDisplayColumns);
+                    form.get(0).querySelectorAll('[name=SelectDisplayColumns],[name=Link],[name=Size],[name=Face],[name=CalendarDateRange]').forEach((elt) => {
+                        elt.tomselect.clear();
+                    });
+                    form.find('[name=Title]').val('');
+                }
+                else {
+                    alert('<% loc("Failed to update format. Reason:") %>' + ' ' + data.message);
+                }
+            },
+            error: function (xhr, reason) {
+                alert('<% loc("Failed to update format. Reason:") %>' + ' ' + reason);
+            }
+        });
+        return false;
+    });
+});
+</script>
+
+  <div class="row mt-2">
+
+    <div class="col-12 col-md-3">
+      <&| /Elements/LabeledValue, Label => loc('Select columns') &>
+        <select class="selectpicker" name="SelectDisplayColumns" id="SelectDisplayColumns" multiple="multiple">
+% my %seen;
+% foreach my $field ( grep !$seen{lc $_}++, @$AvailableColumns) {
+          <option class="<% CSSClass($field) %>" value="<% $field %>" <% $selected{$field} ? 'selected="selected"' : '' |n%>>\
+            <% $field =~ /^(?:CustomField|CF)\./ ? $field : loc($field) %></option>
+% }
+        </select>
+      </&>
+    </div>
+
+    <div class="col-12 col-md-3">
+      <&| /Elements/LabeledValue, Label => loc('Link') &>
+%# leave 1 col to save some space to the right "->"
+        <select name="Link" class="form-select selectpicker">
+          <option value="">-</option>
+          <option value="Display"><&|/l&>Display</&></option>
+% if ($IncludeTicketLinks) {
+          <option value="Take"><&|/l&>Take</&></option>
+          <option value="Respond"><&|/l&>Respond</&></option>
+          <option value="Comment"><&|/l&>Comment</&></option>
+          <option value="Resolve"><&|/l&>Resolve</&></option>
+% }
+        </select>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc('Title') &>
+        <input type="text" name="Title" size="10" class="form-control" />
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc('Size') &>
+        <select name="Size" class="form-select selectpicker">
+          <option value="">-</option>
+          <option value="Small"><&|/l&>Small</&></option>
+          <option value="Large"><&|/l&>Large</&></option>
+        </select>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc('Style') &>
+        <select name="Face" class="form-select selectpicker">
+          <option value="">-</option>
+          <option value="Bold"><&|/l&>Bold</&></option>
+          <option value="Italic"><&|/l&>Italic</&></option>
+        </select>
+      </&>
+
+% if ($Class eq 'RT::Tickets') {
+      <&| /Elements/LabeledValue, Label => loc('Calendar Date Range') &>
+        <select name="CalendarDateRange" class="form-select selectpicker">
+          <option value="">-</option>
+          <option value="Start"><&|/l&>Start</&></option>
+          <option value="End"><&|/l&>End</&></option>
+        </select>
+      </&>
+% }
+    </div>
+
+    <div class="col-2 col-md-1">
+      <div class="row mt-3">
+        <div class="col-12">
+          <input type="submit" class="btn btn-primary" name="AddCol" value=" &rarr; " />
+        </div>
+      </div>
+    </div>
+
+    <div class="col-10 col-md-4">
+      <div class="row mt-2">
+        <div class="col-12">
+          <select size="8" class="tall form-control" name="CurrentDisplayColumns">
+% my $i=0;
+% my $current = $ARGS{CurrentDisplayColumns} || ''; $current =~ s/^\d+>//;
+% foreach my $field ( @$CurrentFormat ) {
+            <option value="<% $i++ %>><% $field->{Column} %>" <% $field->{Column} eq $current ? 'selected="selected"' : '' |n%>>\
+<% $field->{Column} =~ /^(?:CustomField|CF)\./ ? $field->{Column} : loc( $field->{Column} ) %></option>
+% }
+          </select>
+        </div>
+      </div>
+
+      <div class="row mt-2">
+        <div class="col-12 text-center">
+          <input type="submit" class="btn btn-primary" name="ColUp" value=" &uarr; " />
+          <input type="submit" class="btn btn-primary" name="ColDown" value=" &darr; " />
+          <input type="submit" class="btn btn-primary" name="RemoveCol" value="<%loc('Delete')%>" />
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%init>
+my $selected = $ARGS{AddCol} ? [] : $ARGS{SelectDisplayColumns};
+$selected = [ $selected ] unless ref $selected;
+my %selected;
+$selected{$_}++ for grep {defined} @{ $selected };
+</%init>
+<%ARGS>
+$CurrentFormat => undef
+$AvailableColumns => undef
+$Class => 'RT::Tickets'
+$IncludeTicketLinks => $Class eq 'RT::Tickets' ? 1 : 0
+</%ARGS>

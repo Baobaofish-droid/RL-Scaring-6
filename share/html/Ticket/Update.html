@@ -1,0 +1,231 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Elements/Header, Title  => $title, LoadMainContent => 1, &>
+<& /Elements/Tabs &>
+
+% $m->callback(CallbackName => 'BeforeActionList', ARGSRef => \%ARGS, Ticket => $TicketObj, results => \@results);
+<& /Elements/ListActions, actions => \@results &>
+
+<div>
+<form action="Update.html" name="TicketUpdate"
+    method="post" enctype="multipart/form-data">
+% $m->callback( CallbackName => 'FormStart', ARGSRef => \%ARGS, Ticket => $TicketObj, CanRespond => $CanRespond, CanComment => $CanComment, ResponseDefault => $ResponseDefault, CommentDefault => $CommentDefault );
+<input type="hidden" class="hidden" name="QuoteTransaction" value="<% $ARGS{QuoteTransaction}||'' %>" />
+<input type="hidden" class="hidden" name="DefaultStatus" value="<% $DefaultStatus ||''%>" />
+<input type="hidden" class="hidden" name="Action" value="<% $Action %>" />
+<input type="hidden" class="hidden" name="Token" value="<% $ARGS{'Token'} %>" />
+<input type="hidden" class="hidden" name="id" value="<% $TicketObj->Id %>" />
+<input type="hidden" class="hidden" name="DefaultUpdateType" value="<% $ARGS{'UpdateType'} || ( $ResponseDefault ? 'response' : 'private' ) %>" />
+
+<& /Elements/Crypt/SignEncryptWidget:ShowIssues, self => $gnupg_widget, Queue => $TicketObj->QueueObj &>
+
+  <& /Elements/ShowWidgets, Object => $TicketObj, Page => 'Update', ARGSRef => \%ARGS, &>
+
+</form>
+</div>
+<hr class="clear" />
+
+% $m->callback( %ARGS, CallbackName => 'AfterForm', Ticket => $TicketObj );
+
+<%INIT>
+my $CanRespond = 0;
+my $CanComment = 0;
+my $checks_failure = 0;
+
+my $TicketObj = LoadTicket($id);
+
+my @results;
+
+# no support for muliple articles included at the same time
+( $ARGS{IncludeArticleId} ) = grep defined && length, @{ $ARGS{IncludeArticleId} }
+    if ref( $ARGS{IncludeArticleId} ) eq 'ARRAY';
+
+if ($ARGS{IncludeArticleId}) {
+    my $article = RT::Article->new($session{'CurrentUser'});
+    my ($ret, $msg) = $article->Load( $ARGS{IncludeArticleId} );
+
+    if (!$ret) {
+        # Make sure we don't finalize the update if we won't be able to include the article
+        $checks_failure = 1;
+        push @results, loc('Unable to load article "[_1]"', $ARGS{IncludeArticleId});
+    }
+}
+
+$m->callback( Ticket => $TicketObj, ARGSRef => \%ARGS, checks_failure => \$checks_failure, results => \@results, CallbackName => 'Initial' );
+$m->scomp( '/Articles/Elements/SubjectOverride', Ticket => $TicketObj, ARGSRef => \%ARGS, results => \@results );
+
+unless($DefaultStatus){
+    $DefaultStatus=($ARGS{'Status'} ||$TicketObj->Status());
+}
+
+my $title = loc("Update ticket #[_1]: [_2]", $TicketObj->id, $TicketObj->Subject);
+
+# Things needed in the template - we'll do the processing here, just
+# for the convenience:
+
+my ($CommentDefault, $ResponseDefault);
+if ($Action ne 'Respond') {
+    $CommentDefault = qq[ selected="selected"]; 
+    $ResponseDefault = "";
+} else {
+    $CommentDefault = ""; 
+    $ResponseDefault = qq[ selected="selected"];
+}
+
+$CanRespond = 1 if ( $TicketObj->CurrentUserHasRight('ReplyToTicket') or
+                     $TicketObj->CurrentUserHasRight('ModifyTicket') ); 
+
+$CanComment = 1 if ( $TicketObj->CurrentUserHasRight('CommentOnTicket') or
+                     $TicketObj->CurrentUserHasRight('ModifyTicket') ); 
+
+ProcessAttachments(ARGSRef => \%ARGS);
+
+my %squelched = ProcessTransactionSquelching( \%ARGS );
+$ARGS{'SquelchMailTo'} = [keys %squelched] if keys %squelched;
+
+my $gnupg_widget = $m->comp('/Elements/Crypt/SignEncryptWidget:new', Arguments => \%ARGS );
+$m->comp( '/Elements/Crypt/SignEncryptWidget:Process',
+    self => $gnupg_widget,
+    TicketObj => $TicketObj,
+);
+
+my $reload_page;
+if ( $ARGS{'SubmitTicket'} ) {
+    $ARGS{UpdateType} ||= $ARGS{DefaultUpdateType};
+
+    my ($status, @msg) = $m->comp(
+        '/Elements/ValidateCustomFields',
+        CustomFields => $TicketObj->TransactionCustomFields,
+        Object => RT::Transaction->new( $session{'CurrentUser'} ),
+        ARGSRef => \%ARGS
+    );
+    unless ( $status ) {
+        push @results, @msg;
+        $checks_failure = 1;
+    }
+
+    ( $status, @msg ) = $m->comp(
+        '/Elements/ValidateCustomFields',
+        CustomFields => $TicketObj->CustomFields,
+        Object => $TicketObj,
+        ARGSRef => \%ARGS,
+    );
+    unless ( $status ) {
+        push @results, @msg;
+        $checks_failure = 1;
+    }
+
+    $status = $m->comp('/Elements/Crypt/SignEncryptWidget:Check',
+        self      => $gnupg_widget,
+        TicketObj => $TicketObj,
+    );
+    unless ( $status ) {
+        $checks_failure = 1;
+        $reload_page = 1;
+    }
+
+    ( $status, @msg ) = PreprocessTimeUpdates( \%ARGS );
+    unless ( $status ) {
+        push @results, @msg;
+        $checks_failure = 1;
+    }
+}
+
+# check email addresses for RT's
+{
+    foreach my $field ( qw(UpdateCc UpdateBcc) ) {
+        my $value = $ARGS{ $field };
+        next unless defined $value && length $value;
+
+        my ($label) = $field =~ /Update(\w+)/;
+        my ( $filtered_emails, $error_msgs ) = ProcessEmailAddresses(
+            Field   => $field,
+            Value   => $value,
+            Label   => loc( 'One-time [_1]', loc($label) ),
+            ARGSRef => \%ARGS,
+        );
+
+        if ( @$error_msgs ) {
+            push @results, @$error_msgs;
+            $checks_failure ||= 1;
+        }
+        $ARGS{ $field } = join ', ', grep defined, @$filtered_emails;
+    }
+}
+
+# $skip_update is provided below by reference to allow a final check to stop
+# the update and print a message for the user to fix something.
+my $skip_update = 0;
+$m->callback( CallbackName => 'BeforeUpdate', ARGSRef => \%ARGS, skip_update => \$skip_update,
+              checks_failure => $checks_failure, results => \@results, TicketObj => $TicketObj );
+
+if ( !$reload_page && $checks_failure && $ARGS{SubmitTicket} && RT::Interface::Web::RequestENV('HTTP_HX_BOOSTED') ) {
+    $r->headers_out->{'HX-Trigger'} = JSON(
+        {
+            actionsChanged   => { messages => \@results, isWarning => 1 },
+            validationFailed => [ GetInvalidFields( Object => $TicketObj ) ],
+        },
+        ascii => 1,
+    );
+    Abort( loc("Validation error"), Code => HTTP::Status::HTTP_UNPROCESSABLE_CONTENT );
+}
+
+if ( !$checks_failure && !$skip_update && exists $ARGS{SubmitTicket} ) {
+    $m->callback( Ticket => $TicketObj, ARGSRef => \%ARGS, CallbackName => 'BeforeDisplay' );
+    return $m->comp('Display.html', TicketObj => $TicketObj, %ARGS);
+}
+
+$TicketObj->CurrentUser->AddRecentlyViewedTicket($TicketObj);
+
+</%INIT>
+
+<%ARGS>
+$id => undef
+$Action => ''
+$DefaultStatus => undef
+</%ARGS>

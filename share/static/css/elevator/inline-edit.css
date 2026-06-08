@@ -1,0 +1,135 @@
+div.editable>.value span {
+    display: inline-block;
+    margin-right: 1.25em;
+}
+
+div.editable>.value .edit-icon {
+    display: inline;
+    float: right;
+    width: 1em;
+    height: 1em;
+    margin-top: 0.25em;
+    margin-left: -1em;
+    visibility: hidden;
+    cursor: pointer;
+}
+
+div.editable:hover>.value .edit-icon {
+    visibility: visible;
+}
+
+td>.value .edit-icon {
+    display: none;
+}
+
+div.editable.error {
+    font-weight: bold;
+}
+
+div.editable>form.editor {
+    display: none;
+}
+
+div.editable.loading>.value,
+div.editable.loading>form.editor,
+div.editable.editing>form.editor {
+    display: flex;
+}
+
+div.editable.loading>form.editor,
+div.editable.editing>form.editor {
+    position: absolute;
+}
+
+div.editable.loading>.value .edit-icon,
+div.editable.loading>.value {
+    display: none;
+}
+
+/* Let .value take up the width it uses */
+div.editable.editing>.value .edit-icon,
+div.editable.editing>.value {
+    visibility: hidden;
+}
+
+tbody.list-item.refreshing {
+    opacity: 0.5;
+}
+
+div.editable>form.editor>.submit,
+div.editable>form.editor>.cancel {
+    margin-left: 3px;
+    font-size: 16px;
+    cursor: pointer;
+    z-index: 2;
+}
+
+div.editable.loading>form.editor>.submit,
+div.editable.loading>form.editor>.cancel {
+    display: none;
+}
+
+/* .spinner-border avoids conflicts with other .loading elements.
+   E.g. TomSelect elements have .loading while a remote search is in progress. */
+
+div.editable.loading>form.editor>.loading.spinner-border {
+    display: flex;
+    margin-top: 0.5em;
+    margin-left: 0.5em;
+    padding: 0.5em;
+}
+
+div.editable>form.editor>.loading.spinner-border {
+    display: none;
+}
+
+div.editable>form.editor .row {
+    margin-top: 0;
+}
+
+.titlebox form.inline-edit,
+.titlebox.editing .inline-edit-display {
+    display: none;
+}
+
+.titlebox.editing form.inline-edit,
+.titlebox .inline-edit-display {
+    display: block;
+}
+
+/* Override default bootstrap shading for disabled because we use it
+   on regular display to show forms as readonly. */
+
+.form-control:disabled {
+  background-color: transparent;
+  border: solid transparent;
+}
+
+.form-floating > :disabled ~ label::after, .form-floating > .form-control:disabled ~ label::after {
+    background-color: transparent;
+    border: solid transparent;
+}
+
+/* Align tomselect dropdown to the right to make sure options have enough space */
+.inline-edit-right .ts-dropdown {
+    right: 0;
+    left: auto;
+}
+
+/* make inline add message recipients look like ticket update one time cc/bcc */
+/* These colors match tom-select multi-item styling (tom-select.bootstrap5.css line 51-53) */
+div.inline-add-message-recipients div,
+div.inline-add-message-recipients span {
+    background: #efefef;
+    color: #343a40; /* --bs-gray-800 */
+    border: none;
+}
+
+div.inline-add-message-recipients div {
+    border-left: 1px solid var(--bs-border-color);
+}
+
+div.inline-add-message-recipients input {
+    margin: 0px;
+    padding: 0px;
+}

@@ -1,0 +1,165 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%INIT>
+my ($valid, @res) = (1, ());
+$CustomFields->GotoFirstItem;
+
+my $CFArgs = _ParseObjectCustomFieldArgs( $ARGSRef )->{ref($Object)}{$Object->Id || 0} || {};
+
+while ( my $CF = $CustomFields->Next ) {
+    my $submitted = $CFArgs->{ $CF->Id } || { '' => {} };
+    for my $grouping ( sort keys %$submitted ) {
+        my $submitted = $submitted->{$grouping};
+
+        # If we don't have a value and we don't see the Magic, then we're not
+        # submitting a field.
+        next if not $ValidateUnsubmitted
+            and not exists $submitted->{"Value"}
+            and not exists $submitted->{"Upload"}
+            and not exists $submitted->{"Values"}
+            and not $submitted->{"Values-Magic"};
+
+        # We only validate Single Combos -- multis can never be user input
+        next if $submitted->{"Values-Magic"} and exists $submitted->{"Values"}
+            and ref $submitted->{"Values"};
+
+        my ( $invalid, $invalid_message );
+        $m->callback(
+            CallbackName    => 'ValidateValue',
+            Object          => $Object,
+            CustomField     => $CF,
+            Value           => \( $submitted->{Values} // $submitted->{Value} // $submitted->{Upload} ),
+            ARGSRef         => $ARGSRef,
+            CustomFieldArgs => $CFArgs,
+            Invalid         => \$invalid,
+            InvalidMessage  => \$invalid_message,
+        );
+
+        $m->notes(('Field-' . $CF->Id) => $submitted->{Values} // $submitted->{Value});
+
+        # Validation messages can display an alternate label if the RT UI
+        # shows something other than the default CF Name. To use a different
+        # label, provide %Labels with the CF name as the key and the alternate
+        # label as the value.
+
+        my $label = $Labels{$CF->Name} || $CF->Name;
+        my $invalid_key = 'InvalidField-' . $CF->Id . ( $grouping ? "-$grouping" : '' );
+        if ( $invalid ) {
+            $m->notes( $invalid_key => $invalid_message );
+            push @res, $label . ': ' . $invalid_message;
+            $valid = 0;
+            next;
+        }
+
+        my @values = _NormalizeObjectCustomFieldValue(
+            CustomField => $CF,
+            Value       => ($submitted->{Values} // $submitted->{Value} // $submitted->{Upload}),
+        );
+        if ($CF->Type =~ /^Date(?:Time)?$/) {
+            @values = grep {
+                my $DateObj = RT::Date->new ( $session{'CurrentUser'} );
+                $DateObj->Set(
+                    Format => 'unknown',
+                    Value => $_,
+                    ($CF->Type eq "Date" ? (Timezone => 'utc') : ())
+                );
+                $DateObj->IsSet
+            } @values;
+        }
+        push @values, '' unless @values;
+
+        for my $value( @values ) {
+            if ($value) {
+                my $ref = { Content => $value };
+                my ($ok, $msg) = $CF->_CanonicalizeValue( $ref );
+                unless ($ok) {
+                    $m->notes( $invalid_key => $msg );
+                    push @res, $label . ': ' . $msg;
+                    $valid = 0;
+                }
+            }
+
+            if (!$CF->MatchPattern($value)) {
+                my $msg = $CF->FriendlyPattern;
+                $m->notes( $invalid_key => $msg );
+                push @res, $label . ': ' . $msg;
+                $valid = 0;
+            }
+
+            if ($CF->UniqueValues) {
+                my $existing = RT::ObjectCustomFieldValues->new(RT->SystemUser);
+                $existing->LimitToCustomField($CF->Id);
+                $existing->LimitToEnabled;
+                $existing->Limit(FIELD => 'ObjectType', VALUE => ref($Object));
+                $existing->Limit(FIELD => 'ObjectId', VALUE => $Object->id || 0, OPERATOR => '!=');
+                $existing->Limit(
+                    FIELD => 'Content',
+                    VALUE => $value,
+                );
+
+                while (my $ocfv = $existing->Next) {
+                    my $msg = loc("'[_1]' is not a unique value", $value);
+                    $m->notes( $invalid_key => $msg );
+                    push @res, $label . ': ' . $msg;
+                    $valid = 0;
+                    last;
+                }
+            }
+        }
+    }
+}
+$m->notes('ValidFields', $valid);
+return wantarray ? ( $valid, List::MoreUtils::uniq(@res) ) : $valid;
+</%INIT>
+<%ARGS>
+$Object => RT::Ticket->new( $session{'CurrentUser'})
+$CustomFields
+$ARGSRef
+$ValidateUnsubmitted => 0
+%Labels => ()   # Optional hash of alternate labels for CFs
+</%ARGS>

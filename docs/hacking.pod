@@ -1,0 +1,32 @@
+=head1 Development of RT
+
+This document has been consolidated into L<RT::StyleGuide>.
+
+Please see L<RT::StyleGuide> for the complete RT Developer Style Guide,
+which covers:
+
+=over 4
+
+=item * Development environment setup
+
+=item * Coding principles and conventions
+
+=item * Code formatting and style
+
+=item * Internationalization
+
+=item * Testing (including Playwright tests)
+
+=item * Version control with git
+
+=item * Code review and submission procedures
+
+=item * Database schema design
+
+=item * Extending RT classes
+
+=item * Web interface (TitleBox, HTMX integration)
+
+=back
+
+=cut

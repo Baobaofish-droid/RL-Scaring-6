@@ -1,0 +1,265 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+% if ($ARGS{'HideOptions'}) {
+<& /Widgets/TitleBoxStart, title => loc('Advanced search'), class => "rolled-up", bodyclass => "hidden" &>
+% } else {
+<& /Widgets/TitleBoxStart, title => loc('Advanced search') &>
+% }
+<div class="row mt-2">
+<h5><&|/l&>Basics</&></h5>
+</div>
+
+<div class="row mt-2">
+  <div class="label col-3">
+    <b><&|/l&>Class</&></b> is
+  </div>
+  <div class="value col-auto">
+    <& /Articles/Elements/SelectClass, Name => 'Class', Multiple =>1, Size => 5 , ShowNullOption => undef,  Default => $ARGS{'Class'} &>
+  </div>
+  <div class="label col-auto">
+    <&|/l&>and not</&>
+  </div>
+  <div class="value col-auto">
+    <& /Articles/Elements/SelectClass, Name => 'Class!', Multiple =>1, Size => 5 , ShowNullOption => undef, Default => $ARGS{'Class!'} &>
+  </div>
+</div>
+
+<div class="row mt-2">
+  <div class="label col-3">
+    <b><&|/l&>Name</&></b> <&|/l&>matches</&>
+  </div>
+  <div class="value col-auto">
+    <input class="form-control" type="text" name="Name~" value="<%$ARGS{'Name~'}%>" />
+  </div>
+  <div class="label col-auto">
+    <&|/l&>and not</&>
+  </div>
+  <div class="value col-auto">
+    <input class="form-control" type="text" name="Name!~" value="<%$ARGS{'Name!~'}%>" />
+  </div>
+</div>
+
+<div class="row mt-2">
+  <div class="label col-3">
+    <b><&|/l&>Summary</&></b> <&|/l&>matches</&>
+  </div>
+  <div class="value col-auto">
+    <input class="form-control" type="text" name="Summary~" value="<%$ARGS{'Summary~'}%>" />
+  </div>
+  <div class="label col-auto">
+    <&|/l&>and not</&>
+  </div>
+  <div class="value col-auto">
+    <input class="form-control" type="text" name="Summary!~" value="<%$ARGS{'Summary!~'}%>" />
+  </div>
+</div>
+
+<&| /Elements/LabeledValue, Label => '' &>
+  <div class="form-check">
+    <input type="checkbox" id="FindDisabledArticles" name="FindDisabledArticles" class="form-check-input checkbox" <% $ARGS{'FindDisabledArticles'} ? 'checked="checked"' : "" %> />
+    <label class="form-check-label" for="FindDisabledArticles"><&|/l&>Include disabled articles in listing.</&></label>
+  </div>
+</&>
+
+<div class="row mt-2">
+  <h5><&|/l&>Content</&></h5>
+</div>
+
+<div class="row mt-2">
+  <div class="label col-3">
+    <b><&|/l&>Any field</&></b> <&|/l&>matches</&>
+  </div>
+  <div class="value col-auto">
+    <input class="form-control" type="text" name="Article~" value="<%$ARGS{'Article~'}%>" />
+  </div>
+  <div class="label col-auto">
+    <&|/l&>and not</&>
+  </div>
+  <div class="value col-auto">
+    <input class="form-control" type="text" name="Article!~" value="<%$ARGS{'Article!~'}%>" />
+  </div>
+</div>
+
+% while (my $field = $customfields->Next ) {
+<div class="row mt-2">
+  <div class="label col-3">
+    <b><% $field->Name %></b> <&|/l&>matches</&>
+  </div>
+  <div class="value col-auto">
+% my $matches = $field->Name."~";
+% my $nomatches = $field->Name."!~";
+<& /Articles/Article/Elements/SearchByCustomField, 
+    Field => $field, 
+    Name => $matches,
+    Values => $ARGS{$matches} &>
+      </div>
+      <div class="label col-auto">
+        <&|/l&>and not</&>
+      </div>
+      <div class="value col-auto">
+<& /Articles/Article/Elements/SearchByCustomField, 
+    Field => $field, 
+    Name => $nomatches,
+    Values => $ARGS{$nomatches}
+    &>
+  </div>
+</div>
+% }
+
+<div class="row mt-2">
+  <h5><&|/l&>Dates</&></h5>
+</div>
+
+<div class="row mt-2">
+  <div class="label col-3">
+    <b><&|/l&>Created</&></b> <&|/l&>after</&>
+  </div>
+  <div class="value col-auto">
+    <& /Elements/SelectDate, Name=>"Created>", Default => ($dates->{'Created>'} ? $dates->{'Created>'}->ISO : '') &>
+  </div>
+  <div class="label col-auto">
+    <&|/l&>and before</&>
+  </div>
+  <div class="value col-auto">
+    <& /Elements/SelectDate, Name=>"Created<", Default => ($dates->{'Created<'} ? $dates->{'Created<'}->ISO:'')&>
+  </div>
+</div>
+
+<div class="row mt-2">
+  <div class="label col-3">
+    <b><&|/l&>Last updated</&></b> <&|/l&>after</&>
+  </div>
+  <div class="value col-auto">
+    <& /Elements/SelectDate, Name=>"LastUpdated>", Default =>
+    ($dates->{'LastUpdated>'} ? $dates->{'LastUpdated>'}->AsString:'')&>
+  </div>
+  <div class="label col-auto">
+    <&|/l&>and before</&>
+  </div>
+  <div class="value col-auto">
+    <& /Elements/SelectDate, Name=>"LastUpdated<", Default =>
+    ($dates->{'LastUpdated<'} ? $dates->{'LastUpdated<'}->AsString:'')&>
+  </div>
+</div>
+
+<div class="row mt-2">
+  <h5><&|/l&>Links</&></h5>
+</div>
+
+<div class="row mt-2">
+  <div class="label col-3"></div>
+  <div class="label col-9 text-start">
+    <& LinkEntryInstructions &>
+  </div>
+</div>
+
+<div class="row mt-2">
+  <div class="label col-3">
+    <b><&|/l&>Refer to</&></b>
+  </div>
+  <div class="value col-auto">
+    <input class="form-control" type=text size=50 name="RefersTo" value="<%$RefersTo%>" />
+  </div>
+</div>
+<div class="row mt-2">
+  <div class="label col-3">
+    <b><&|/l&>Referred to by</&></b>
+  </div>
+  <div class="value col-auto">
+    <input class="form-control" type=text size=50 name="ReferredToBy" value="<%$ReferredToBy%>" />
+  </div>
+</div>
+
+<div class="row mt-2">
+  <h5><&|/l&>Topics</&></h5>
+</div>
+
+
+<& /Articles/Article/Elements/EditTopics, %ARGS, Classes => \@Classes, OnlyThisClass => 1 &>
+
+
+<div class="row mt-2">
+  <div class="label col-3"></div>
+  <div class="value col-9">
+    <div class="form-check">
+      <input type="checkbox" id="ExpandTopics" name="ExpandTopics" class="form-check-input" <% $ARGS{'ExpandTopics'} ? 'checked="checked"' : "" %> />
+      <label class="form-check-label" for="ExpandTopics"><&|/l&>Include subtopics</&></label>
+    </div>
+  </div>
+</div>
+
+
+<& /Elements/Submit, Label => loc('Search'), FullWidth => 1 &>
+
+<& /Widgets/TitleBoxEnd &>
+<%init>
+my @Classes =
+ ( ref $ARGS{'Class'} eq 'ARRAY' )
+      ? @{ $ARGS{'Class'} }
+      : ( $ARGS{'Class'} );
+for (@Classes) {
+  my $class = RT::Class->new( $session{'CurrentUser'} );
+  $class->LoadById($_);
+  $_ = $class;
+}
+
+for my $field ( qw/Class Name Summary Article/ ) {
+    $ARGS{"$field~"} = '' unless defined $ARGS{"$field~"};
+    $ARGS{"$field!~"} = '' unless defined $ARGS{"$field!~"};
+}
+$RefersTo = '' unless defined $RefersTo;
+$ReferredToBy = '' unless defined $ReferredToBy;
+
+</%init>
+
+<%ARGS>
+$dates =>undef
+$RefersTo => ''
+$ReferredToBy => ''
+$customfields => undef
+</%ARGS>

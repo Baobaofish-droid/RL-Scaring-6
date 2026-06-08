@@ -1,0 +1,141 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<div class="row mt-2">
+  <div class="col-1"></div>
+  <div class="col-10">
+<form hx-boost="false" name="AddCustomFieldValue" action="Modify.html" method="post">
+<input type="hidden" class="hidden" name="id" value="<% $CustomField->id %>" />
+
+% # we need to allow for an extra col-2 if not combobox and categories are enabled
+% # if so, make the description cols -2 smaller to allow for categories
+% my $description_col_size = ( $CustomField->Type ne 'Combobox' && $Categories ? 4 : 6 );
+
+  <div class="row mt-2">
+    <div class="label col-1 text-start">
+      <&|/l&>Sort</&>
+    </div>
+    <div class="label col-4 text-start">
+      <&|/l&>Name</&>
+    </div>
+    <div class="label col-<% $description_col_size %> text-start">
+      <&|/l&>Description</&>
+    </div>
+% if ( $CustomField->Type ne 'Combobox' && $Categories ) {
+    <div class="label categoryheader col-2 text-start">
+      <&|/l&>Category</&>
+    </div>
+% }
+  </div>
+
+% my $paramtag = "CustomField-". $CustomField->Id ."-Value-new";
+  <div class="row mt-2">
+    <div class="value col-1">
+      <input class="form-control" type="text" size="3"  name="<% $paramtag %>-SortOrder" />
+    </div>
+    <div class="value col-4">
+      <input class="form-control" type="text" size="25" name="<% $paramtag %>-Name" />
+    </div>
+    <div class="value col-<% $description_col_size %>">
+      <input class="form-control" type="text" size="45" name="<% $paramtag %>-Description" />
+    </div>
+% if ( $CustomField->Type ne 'Combobox' && $Categories ) {
+    <div class="value col-2">
+      <select class="form-select selectpicker editcategory " name="<% $paramtag %>-Category" size="1">
+<option value=""><&|/l&>(no value)</&></option>
+% while (my $Value = $Categories->Next) {
+        <option value="<% $Value->Name %>"><% $Value->Name %></option>
+%   }
+      </select>
+    </div>
+% }
+    <div class="col-1">
+      <input type="submit" class="btn btn-primary btn-sm" name="AddValue" value="<&|/l&>Add</&>" />
+    </div>
+  </div>
+% $m->callback(CallbackName => 'AfterCustomFieldValueInput', CustomFieldObj => $CustomField, ARGSRef => \%ARGS );
+</form>
+</div>
+  <div class="col-1"></div>
+</div>
+
+<script type="text/javascript">
+jQuery( function() {
+    jQuery('form[name=AddCustomFieldValue]').submit(function() {
+        jQuery.post('<% RT->Config->Get('WebPath') %>/Helpers/Admin/EditCustomFieldValue', {
+            action: 'add',
+            cf_id: <% $CustomField->id %>,
+            sort_order: jQuery('input[name=CustomField-<% $CustomField->id %>-Value-new-SortOrder]').val(),
+            name: jQuery('input[name=CustomField-<% $CustomField->id %>-Value-new-Name]').val(),
+            description: jQuery('input[name=CustomField-<% $CustomField->id %>-Value-new-Description]').val(),
+            category: jQuery('[name=CustomField-<% $CustomField->id %>-Value-new-Category]').val()
+        }, function(data) {
+            if ( data.status != 0 ) {
+                jQuery('div.edit_custom_field_values').html(data.html);
+                jQuery('input[name=CustomField-<% $CustomField->id %>-Value-new-SortOrder]').val(''),
+                jQuery('input[name=CustomField-<% $CustomField->id %>-Value-new-Name]').val('').focus(),
+                jQuery('input[name=CustomField-<% $CustomField->id %>-Value-new-Description]').val(''),
+                initializeSelectElements(document.querySelector('div.edit_custom_field_values'));
+            }
+            else {
+                alert(data.message);
+            }
+        }, 'json');
+        return false;
+    });
+});
+</script>
+<%init>
+my $BasedOnObj = $CustomField->BasedOnObj;
+my $Categories;
+if ($BasedOnObj and $BasedOnObj->Id) {
+    $Categories = $BasedOnObj->Values;
+}
+</%init>
+<%args>
+$CustomField => undef
+</%args>

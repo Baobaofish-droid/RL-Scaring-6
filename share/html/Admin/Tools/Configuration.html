@@ -1,0 +1,404 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%init>
+require  Module::Versions::Report;
+my $title = loc('System Configuration');
+unless ($session{'CurrentUser'}->HasRight( Object=> $RT::System, Right => 'SuperUser')) {
+ Abort(loc('This feature is only available to system administrators'));
+}
+</%init>
+<& /Admin/Elements/Header, Title => $title &>
+<& /Elements/Tabs &>
+<div class="configuration">
+<& /Admin/Elements/ConfigHelp &>
+<&|/Widgets/TitleBox, title => loc("Current Configuration"), class => 'fullwidth' &>
+  <div class="row mt-2">
+    <div class="label col-4 text-start"><&|/l&>Option</&></div>
+    <div class="label col-4 text-start"><&|/l&>Value</&></div>
+    <div class="label col-4 text-start"><&|/l&>Source</&></div>
+  </div>
+
+<%PERL>
+my $index_conf;
+foreach my $key ( RT->Config->Options( Overridable => undef, Sorted => 0 ) ) {
+    my $val = RT->Config->GetObfuscated( $key, $session{'CurrentUser'} );
+    next unless defined $val;
+
+    my $meta = RT->Config->Meta( $key );
+    my $description = '';
+    if ( $meta->{'Source'}{'Database'}) {
+        $description = loc("database");
+    }
+    elsif ( $meta->{'Source'}{'Extension'} && $meta->{'Source'}{'SiteConfig'} ) {
+        $description = loc("[_1] site config", $meta->{'Source'}{'Extension'});
+    }
+    elsif ( $meta->{'Source'}{'Extension'} ) {
+        $description = loc("[_1] core config", $meta->{'Source'}{'Extension'});
+    }
+    elsif ( $meta->{'Source'}{'SiteConfig'} ) {
+        $description = loc("site config");
+    }
+    else {
+        $description = loc("core config");
+    }
+    $index_conf++;
+
+    if ( $meta->{DisplayCallback} ) {
+        $val = $meta->{DisplayCallback}->($val, CurrentUser => $session{'CurrentUser'});
+    }
+</%PERL>
+  <div class="row mt-2 <% $index_conf%2 ? 'oddline' : 'evenline'%>">
+    <div class="value col-4 collection-as-table"><% $key %></div>
+    <div class="value col-4 collection-as-table"><% stringify($val) |n %></div>
+    <div class="value col-4 collection-as-table">
+% if ( $meta->{'Source'}{'SiteConfig'} ) {
+<% $description %>
+% } else {
+<% $description %>
+% }
+    </div>
+  </div>
+% }
+</&>
+
+<div class="row mt-2">
+
+  <div class="col-8">
+    <&|/Widgets/TitleBox, title=> loc("RT core variables") &>
+      <div class="row mt-2">
+        <div class="label col-6 collection-as-table text-start"><&|/l&>Variable</&></div>
+        <div class="label col-6 collection-as-table text-start"><&|/l&>Value</&></div>
+      </div>
+<%PERL>
+{ no strict qw/refs/;
+my %config_opt = map { $_ => 1 } RT->Config->Options( Overridable => undef );
+my $index_var;
+foreach my $key ( sort keys %{*RT::} ) {
+    next if !${'RT::'.$key} || ref ${'RT::'.$key} || $config_opt{ $key };
+    $index_var++;
+</%PERL>
+      <div class="row mt-2 collection-as-table <% $index_var%2 ? 'oddline' : 'evenline'%>">
+        <div class="value col-6 collection-as-table">RT::<% $key %></div>
+        <div class="value col-6 collection-as-table"><% ${'RT::'.$key} %></div>
+      </div>
+% }
+% }
+    </&>
+
+    <&|/Widgets/TitleBox, title => loc("RT Size") &>
+%   if ( $LoadSize ) {
+      <div class="row mt-2">
+        <div class="collection-as-table label col-6 text-start"><&|/l&>Object</&></div>
+        <div class="collection-as-table label col-6 text-start"><&|/l&>Size</&></div>
+      </div>
+<%PERL>
+my ($index_size, $user_count, $privileged_count);
+for my $type (qw/Tickets Queues Transactions Articles Assets Groups PrivilegedUsers UnprivilegedUsers/) {
+    my $count;
+    my $class = 'RT::' . $type;
+    $class =~ s/Privileged|Unprivileged//;
+    my $collection = $class->new(RT->SystemUser);
+    $collection->UnLimit;
+    $collection->FindAllRows;   # find disabled
+    if ($type =~ /PrivilegedUsers/) {
+        $user_count = $collection->CountAll;
+        $collection->LimitToPrivileged;
+        $count = $privileged_count = $collection->CountAll;
+    } elsif ($type =~ /UnprivilegedUsers/) {
+        $count = $user_count - $privileged_count;
+    } else {
+        $count = $collection->CountAll;
+    }
+    $index_size++;
+</%PERL>
+      <div class="<% $index_size%2 ? 'oddline' : 'evenline'%> row mt-2">
+        <div class="collection-as-table value col-6"><% $type %></div>
+        <div class="collection-as-table value col-6"><% $count %></div>
+      </div>
+% }
+
+%   } else {
+    <a class="mt-2 btn btn-primary" href="?LoadSize=1"><&|/l&>Load Size</&></a>
+%   }
+</&>
+
+  </div>
+
+  <div class="col-4">
+
+    <&|/Widgets/TitleBox, title => loc("Mason template search order") &>
+
+% if ( $m->interp->{rt_mason_cache_created} ) {
+% my $mason_obj_date = RT::Date->new( $session{CurrentUser} );
+% $mason_obj_date->Set( Format => 'Unix', Value => $m->interp->{rt_mason_cache_created} );
+
+<div class="mason-cache">
+  <div class="mason-cache-info py-1 d-inline-block">
+    <&|/l&>Cache created</&>: <% $mason_obj_date->AsString %>
+  </div>
+  <a class="btn btn-primary btn-sm clear-mason-cache float-end" href="javascript:;"><&|/l&>Clear Mason Cache</&></a>
+</div>
+<script type="text/javascript">
+jQuery('a.clear-mason-cache').click( function() {
+    jQuery.post(RT.Config.WebHomePath + '/Admin/Helpers/ClearMasonCache', function(data) {
+        jQuery('div.mason-cache div.mason-cache-info').text(data.message);
+    }, 'json');
+    return false;
+});
+</script>
+
+% }
+
+      <ol class="list-group-compact list-group">
+% foreach my $path ( RT::Interface::Web->ComponentRoots ) {
+        <li class="list-group-item"><% $path %></li>
+% }
+      </ol>
+    </&>
+
+    <&|/Widgets/TitleBox, title => loc("Static file search order") &>
+      <ol class="list-group-compact list-group">
+% foreach my $path ( (map {$_->{root}} RT->Config->Get('StaticRoots')),
+%                    RT::Interface::Web->StaticRoots ) {
+        <li class="list-group-item"><% $path %></li>
+% }
+      </ol>
+    </&>
+
+    <&|/Widgets/TitleBox, title => loc("Perl library search order") &>
+      <ol class="list-group-compact list-group">
+% foreach my $inc (@INC) {
+        <li class="list-group-item"><% $inc %></li>
+% }
+      </ol>
+    </&>
+
+    <&|/Widgets/TitleBox, title=> loc("Loaded config files") &>
+      <ol class="list-group-compact list-group">
+% foreach my $config (RT->Config->LoadedConfigs) {
+%   if ($config->{site}) {
+        <li class="list-group-item"><strong><% $config->{filename} %></strong></li>
+%   } else {
+        <li class="list-group-item"><% $config->{filename} %></li>
+%   }
+% }
+      </ol>
+    </&>
+
+    <&|/Widgets/TitleBox, title=> loc("Logging summary") &>
+      <& /Admin/Elements/LoggingSummary &>
+    </&>
+
+  </div>
+
+</div>
+
+<&|/Widgets/TitleBox, title => loc("Global Attributes") &>
+  <div class="collection row mt-2">
+    <div class="collection-as-table label col-6 text-start"><&|/l&>Name</&></div>
+    <div class="collection-as-table label col-6 text-start"><&|/l&>Value</&></div>
+  </div>
+% my $attrs = $RT::System->Attributes;
+% $m->callback( CallbackName => 'ModifySystemAttributes', Attributes => $attrs );
+% my $index_size = 0;
+% while ( my $attr = $attrs->Next ) {
+% next if $attr->Name eq 'UpgradeHistory';
+<div class="<% $index_size%2 ? 'oddline' : 'evenline'%> row mt-2">
+% if ($attr->Name eq 'UserLogo') {
+%   my $content = $attr->Content;
+%   $content->{data} = defined $content->{data} ? 'DATA' : 'undef'
+%       if exists $content->{data};
+<div class="label col-6">
+  <% $attr->Name %>
+</div>
+<div class="value col-6">
+  <% stringify($content) |n %>
+</div>
+% } else {
+<div class="label col-6">
+  <% $attr->Name %>
+</div>
+<div class="value col-6">
+  <% stringify($attr->Content) |n %>
+</div>
+% }
+</div>
+% $index_size++;
+% }
+</&>
+
+<&|/Widgets/TitleBox, title => loc("Loaded RT Extensions")&>
+  <div class="collection row mt-2">
+    <div class="collection-as-table label col-6 text-start"><&|/l&>Extension</&></div>
+    <div class="collection-as-table label col-6 text-start"><&|/l&>Version</&></div>
+  </div>
+% my $row = 0;
+% foreach my $pluginName (grep $_, RT->Config->Get('Plugins')) {
+% my $plugin = RT::Plugin->new( name => $pluginName );
+<div class="<% $row++ %2 ? 'oddline' : 'evenline'%> row mt-2">
+<div class="collection-as-table value col-6"><%$plugin->Name%></div>
+<div class="collection-as-table value col-6"><%$plugin->Version%></div>
+</div>
+% }
+</&>
+
+<&|/Widgets/TitleBox, title => loc("Loaded perl modules")&>
+  <div class="collection row mt-2">
+    <div class="collection-as-table label col-4 text-start"><&|/l&>Module</&></div>
+    <div class="collection-as-table label col-4 text-start"><&|/l&>Version</&></div>
+    <div class="collection-as-table label col-4 text-start"><&|/l&>Source</&></div>
+  </div>
+
+<%perl>
+my $i = 0;
+my $report = Module::Versions::Report::report();
+my @report = grep /v\d/, split("\n",$report);
+shift @report; # throw away the perl version
+my ($ver, $source, $distfile);
+foreach my $item (@report) {
+if ($item =~ /^\s*(.*?)\s*v(\S+);/) {
+    $item = $1;
+    $ver = $2;
+    $distfile = $item.".pm";
+    $distfile =~ s|::|/|g;
+}
+</%perl>
+<div class="<% $i++ %2 ? 'oddline' : 'evenline'%> row mt-2">
+<div class="collection-as-table value col-4"><% $item %></div>
+    <div class="collection-as-table value col-4"><%$ver%></div>
+    <div class="collection-as-table value col-4"><% $INC{$distfile} || '' %></div>
+</div>
+% }
+</&>
+
+<&|/Widgets/TitleBox, title => loc("RT upgrade history")&>
+<& /Admin/Elements/UpgradeHistory &>
+</&>
+
+<&|/Widgets/TitleBox, title => loc("Perl configuration") &>
+% require Config;
+<pre>
+<% Config::myconfig() %>
+</pre>
+</&>
+
+<&|/Widgets/TitleBox, title=> loc("Environment variables") &>
+  <div class="collection row mt-2">
+    <div class="collection-as-table label col-6 text-start"><&|/l&>Variable</&></div>
+    <div class="collection-as-table label col-6 text-start"><&|/l&>Value</&></div>
+  </div>
+% my $row = 0;
+% for my $key (sort keys %ENV) {
+<div class="collection-as-table <% $row++ %2 ? 'oddline' : 'evenline'%> row mt-2">
+<div class="collection-as-table value col-6"><% $key %></div>
+<div class="collection-as-table value col-6"><% $ENV{$key} %></div>
+</div>
+% }
+</&>
+
+<&|/Widgets/TitleBox, title => loc("Operating System") &>
+  <div class="collection evenline row mt-2">
+    <div class="collection-as-table label col-6 text-start">Deployment type</div>
+
+    <div class="collection-as-table col-6"><%
+      $INC{'mod_perl.pm'} ? "mod_perl" :
+      $INC{'FCGI.pm'}     ? "fastcgi"  :
+                            "standalone" %>
+    </div>
+  </div>
+<%perl>
+my @os = (
+    "Distribution"   => 'lsb_release --all',
+    "uname -a"       => 'uname -a',
+    "SELinux status" => 'getenforce',
+    "Apache"         => [map { "$_ -V" } qw(apache2ctl apachectl httpdctl)],
+    "nginx"          => 'nginx -V 2>&1',
+    "lighttpd"       => 'lighttpd -V',
+);
+my @os_info;
+
+while (my ($name, $cmd) = splice @os, 0, 2) {
+    $cmd = [$cmd] unless ref $cmd eq 'ARRAY';
+    for my $run (@$cmd) {
+        $run .= " </dev/null";
+        $run .= " 2>/dev/null" unless $run =~ /2>/;
+        my $result = `$run`;
+        if (defined $result and $result =~ /\S/) {
+            push @os_info, $name => $result;
+            last;
+        }
+    }
+}
+my $row = 1;
+</%perl>
+% while (my ($name, $output) = splice @os_info, 0, 2) {
+<div class="collection-as-table <% $row++ % 2 ? "oddline" : "evenline" %> row mt-2">
+<div class="collection-as-table value col-6"><% $name %></div>
+<div class="collection-as-table value col-6" style="white-space: pre-wrap; font-family: monospace"><% $output %></div>
+</div>
+% }
+</&>
+</div>
+<%INIT>
+use Data::Dumper;
+local $Data::Dumper::Terse = 1;
+local $Data::Dumper::Indent = 2;
+
+sub stringify {
+    my $value = shift;
+    my $output = ref $value ? Dumper $value : $value;
+    RT::Interface::Web::EscapeHTML(\$output);
+    $output =~ s/ /&nbsp;/g;
+    $output =~ s!\n!<br />!g;
+    return $output;
+}
+</%INIT>
+
+<%ARGS>
+$LoadSize => undef
+</%ARGS>

@@ -1,0 +1,598 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Elements/Header, Title => $title &>
+<& /Elements/Tabs &>
+
+<& /Elements/ListActions, actions => \@results &>
+
+<form action="<%RT->Config->Get('WebPath')%>/Dashboards/Subscription.html" method="post" enctype="multipart/form-data" name="SubscribeDashboard">
+<input type="hidden" class="hidden" name="id" value="<% $id %>" />
+
+<&| /Widgets/TitleBox, title => loc('Dashboard') &>
+<& /Elements/LabeledValue, Label => loc('Dashboard'), ValueSpanClass => 'current-value form-control', Value => $Dashboard->Name &>
+<&| /Elements/LabeledValue, Label => loc('Queries'), ValueSpanClass => 'current-value form-control' &>
+% my @portlets = grep { defined } $Dashboard->Portlets;
+% if (!@portlets) {
+(<&|/l&>none</&>)
+% } else {
+      <ol class="dashboard-queries list-group list-group-compact">
+%   for my $portlet (@portlets) {
+        <li class="dashboard-query list-group-item">
+          <% loc( RT::SavedSearch->EscapeDescription($portlet->{description}), $fields{'Rows'}) %>
+        </li>
+%   }
+      </ol>
+% }
+  </&>
+</&>
+
+<&| /Widgets/TitleBox, title => loc('Subscription') &>
+<&| /Elements/LabeledValue, Label => loc('Frequency') &>
+
+      <div class="row mt-2">
+        <div class="col-auto">
+          <div class="form-check">
+            <input type="radio" id="Frequency-daily" name="Frequency" value="daily" <% $fields{'Frequency'} eq 'daily' ? 'checked="checked"' : "" |n %> class="form-check-input">
+            <label class="form-check-label" for="Frequency-daily"><&|/l&>daily, on</&></label>
+          </div>
+        </div>
+% for my $day ( qw/Monday Tuesday Wednesday Thursday Friday Saturday Sunday/ ) {
+        <div class="col-auto">
+          <input type="hidden" class="hidden" name="<% $day %>-Magic" value="1" />
+          <div class="form-check">
+            <input type="checkbox" id="Frequency-daily-<% $day %>" name="<% $day %>" class="form-check-input" value="1" <% $fields{$day} ? 'checked="checked"' : '' %>>
+            <label class="form-check-label" for="Frequency-daily-<% $day %>"><% loc($day) %></label>
+          </div>
+        </div>
+% }
+      </div>
+      <div class="row mt-2">
+        <div class="col-auto">
+          <span class="current-value form-control">
+            <div class="form-check">
+              <input type="radio" id="Frequency-weekly" name="Frequency" value="weekly" <% $fields{'Frequency'} eq 'weekly' ? 'checked="checked"' : "" |n %> class="form-check-input">
+              <label class="form-check-label" for="Frequency-weekly"><&|/l&>weekly</&>, <&|/l&>on</&></label>
+            </div>
+          </span>
+        </div>
+        <div class="col-auto">
+          <select name="Dow" class="form-select selectpicker">
+              <option value="Monday" <% $fields{'Dow'} eq 'Monday' ? 'selected="selected"' : '' |n %>><&|/l&>Monday</&></option>
+              <option value="Tuesday" <% $fields{'Dow'} eq 'Tuesday' ? 'selected="selected"' : '' |n %>><&|/l&>Tuesday</&></option>
+              <option value="Wednesday" <% $fields{'Dow'} eq 'Wednesday' ? 'selected="selected"' : '' |n %>><&|/l&>Wednesday</&></option>
+              <option value="Thursday" <% $fields{'Dow'} eq 'Thursday' ? 'selected="selected"' : '' |n %>><&|/l&>Thursday</&></option>
+              <option value="Friday" <% $fields{'Dow'} eq 'Friday' ? 'selected="selected"' : '' |n %>><&|/l&>Friday</&></option>
+              <option value="Saturday" <% $fields{'Dow'} eq 'Saturday' ? 'selected="selected"' : '' |n %>><&|/l&>Saturday</&></option>
+              <option value="Sunday" <% $fields{'Dow'} eq 'Sunday' ? 'selected="selected"' : '' |n %>><&|/l&>Sunday</&></option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <span class="current-value form-control"><&|/l&>every</&></span>
+        </div>
+        <div class="col-auto">
+          <select name="Fow" class="form-select selectpicker">
+% for my $f ( qw/1 2 3 4/ ) {
+            <option value="<%$f%>" <% $fields{'Fow'} == $f ? 'selected="selected"' : '' |n %>><% $f %></option>
+% }
+          </select>
+        </div>
+        <div class="col-auto">
+          <span class="current-value form-control"><&|/l&>weeks</&></span>
+        </div>
+      </div>
+      <div class="row mt-2">
+        <div class="col-auto">
+          <span class="current-value form-control">
+            <div class="form-check">
+              <input type="radio" id="Frequency-monthly" name="Frequency" value="monthly" <% $fields{'Frequency'} eq 'monthly' ? 'checked="checked"' : "" |n %> class="form-check-input">
+              <label class="form-check-label" for="Frequency-monthly"><&|/l&>monthly</&>, <&|/l&>on day</&></label>
+            </div>
+          </span>
+        </div>
+        <div class="col-auto">
+          <select name="Dom" class="form-select selectpicker">
+% for my $dom (1..31) {
+            <option value="<% $dom %>" <% $fields{'Dom'} == $dom ? 'selected="selected"' : '' |n %>><% loc($dom) %></option>
+% }
+          </select>
+        </div>
+      </div>
+      <div class="row mt-2">
+        <div class="col-auto">
+          <span class="current-value form-control">
+            <div class="form-check">
+              <input type="radio" id="Frequency-never" name="Frequency" value="never" <% $fields{'Frequency'} eq 'never' ? 'checked="checked"' : "" |n %> class="form-check-input">
+              <label class="form-check-label" for="Frequency-never"><&|/l&>never</&></label>
+            </div>
+          </span>
+        </div>
+      </div>
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc('Hour') &>
+      <div class="row">
+        <div class="col-auto">
+          <select name="Hour" class="form-select selectpicker">
+% my $formatter = RT::Date->new($session{CurrentUser})->LocaleObj;
+% my $dt = DateTime->now;
+% $dt->set_minute(0);
+% $dt->set_second(0);
+
+% for my $hour (0..23) {
+%     $dt->set_hour($hour);
+%     my $formatted = $dt->format_cldr($formatter->time_format_short);
+
+%     my $value = sprintf '%02d:00', $hour;
+%     my $selected = $value eq $fields{'Hour'}
+%                  ? 'selected="selected"'
+%                  : '';
+
+            <option value="<% $value %>" <%$selected|n %>><% $formatted %></option>
+% }
+          </select>
+        </div>
+        <div class="col-auto">
+          <span class="current-value form-control">(<%$timezone%>)</span>
+        </div>
+      </div>
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc('Language') &>
+      <div class="row">
+        <div class="col-auto">
+          <& /Elements/SelectLang,
+              Name => 'Language',
+              Default => $fields{'Language'},
+              ShowNullOption => 1,
+           &>
+        </div>
+      </div>
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc('Rows') &>
+      <div class="row">
+        <div class="col-auto">
+          <select name="Rows" class="form-select selectpicker">
+            <option value="" <% defined $fields{'Rows'} && length $fields{'Rows'} ? '' : 'selected="selected"' |n %>><% loc('Default') %></option>
+% for my $rows ( RT->Config->Get('EmailDashboardRows') ) {
+            <option value="<% $rows %>" <% $fields{'Rows'} eq $rows ? 'selected="selected"' : '' |n %>><% loc($rows || 'Unlimited') %></option>
+% }
+          </select>
+        </div>
+      </div>
+  </&>
+
+  <&| /Elements/LabeledValue, Label => '' &>
+      <div class="form-check">
+        <input type="checkbox" id="SuppressIfEmpty" name="SuppressIfEmpty" class="form-check-input" value="1"  <% $fields{'SuppressIfEmpty'} ? 'checked="checked"' : "" |n %>>
+        <label class="form-check-label" for="SuppressIfEmpty"><&|/l&>Suppress if empty (Check this to avoid sending mail if all searches have no results)</&></label>
+        <input type="hidden" class="hidden" name="SuppressIfEmpty-Magic" value="1" />
+      </div>
+  </&>
+
+  <&| /Elements/LabeledValue, Label => '' &>
+    <div class="form-check">
+      <input type="checkbox" class="form-check-input checkbox" id="Enabled" name="Enabled" value="1" <% $ARGS{'Disabled'} ? '' : 'checked' %> />
+      <input type="hidden" class="hidden" name="SetEnabled" value="1" />
+      <label class="form-check-label" for="Enabled"><&|/l&>Enabled (Unchecking this box disables this subscription)</&></label>
+    </div>
+  </&>
+
+% $m->callback( %ARGS, CallbackName => 'SubscriptionFormEnd', FieldsRef => \%fields,
+%     SubscriptionObj => $SubscriptionObj, DashboardObj => $Dashboard );
+</&>
+
+<&| /Widgets/TitleBox, title => loc('Search Context') &>
+
+  <p class="description mb-1 ms-3">
+  <&|/l&>Most searches show the same results for all users and can be run as the user who owns the dashboard subscription (Subscription owner).</&>
+  </p>
+
+  <p class="description mt-2 mb-1 ms-3">
+  <&|/l&>For searches like "10 highest priority tickets I own" that contain __CurrentUser__ in the query, the results are specific to each recipient. For dashboards with these searches, select "Each dashboard recipient" below to run each search with the recipient set as the "Current User".</&>
+  </p>
+
+  <&| /Elements/LabeledValue, Label => loc('Run Dashboard Searches As') &>
+      <div class="form-check">
+        <input type="radio" id="context-subscriber" name="Context" class="form-check-input" value="subscriber" <% ($fields{'Context'} // '') ne 'recipient' ? 'checked="checked"' : "" |n %>></input>
+        <label class="form-check-label" for="context-subscriber"><&|/l&>Subscription owner</&>(<% $session{CurrentUser}->Name %>)</label>
+      </div>
+      <div class="form-check">
+        <input type="radio" id="context-recipient" name="Context" class="form-check-input" value="recipient" <% ($fields{'Context'} // '') eq 'recipient' ? 'checked="checked"' : "" |n %>></input>
+        <label class="form-check-label" for="context-recipient"><&|/l&>Each dashboard recipient</&></label>
+      </div>
+  </&>
+</&>
+
+<&| /Widgets/TitleBox, title => loc('Recipients') &>
+<& Elements/SubscriptionRecipients,
+    UserField => $UserField, UserString => $UserString, UserOp => $UserOp,
+    GroupString => $GroupString, GroupOp => $GroupOp, GroupField => $GroupField,
+    Recipients => $fields{Recipients},
+    IsFirstSubscription => $SubscriptionObj ? 0 : 1 &>
+</&>
+
+<& /Elements/Submit, Name => "Save", Label => ($SubscriptionObj ? loc('Save Changes'): loc('Subscribe')), FullWidth => 1 &>
+
+% if ($SubscriptionObj) {
+  <&| /Widgets/TitleBox, title => loc('Test Dashboard Subscription') &>
+    <p class="ms-3">
+      <&|/l&>Your dashboard subscription will run automatically using the schedule defined above. This section allows you to manually test sending a dashboard email. Click Show above to view the content of the dashboard without sending email.</&>
+    </p>
+    <&| /Elements/LabeledValue, Label => loc("Send test email to") &>
+      <div class="form-check no-text-input">
+        <input type="radio" id="send-test-email-type-me" name="SendTestEmailType" class="form-check-input" value="me" <% ($ARGS{'SendTestEmailType'} || '') eq 'me' ? ' checked="checked"': '' |n %>>
+        <label class="form-check-label" for="send-test-email-type-me">Me (<% $session{CurrentUser}->EmailAddress %>)</label>
+      </div>
+      <div class="form-check has-text-input">
+        <input type="radio" id="send-test-email-type-custom" name="SendTestEmailType" class="form-check-input" value="custom" <% ($ARGS{'SendTestEmailType'} || '') eq 'custom' ? ' checked="checked"': '' |n %>>
+        <label class="form-check-label d-inline-block" for="send-test-email-type-custom">
+          <&|/l&>One email address</&>:
+          <input class="form-control w-auto d-inline-block" name="SendTestEmailToCustom" value="<% ($ARGS{'SendTestEmailToCustom'} || '') %>" />
+        </label>
+      </div>
+      <div class="form-check has-text-input">
+        <input type="radio" id="send-test-email-type-first" name="SendTestEmailType" class="form-check-input" value="first" <% ($ARGS{'SendTestEmailType'} || '') eq 'first' ? ' checked="checked"': '' |n %>>
+        <label class="form-check-label d-inline-block" for="send-test-email-type-first">
+%#          Make input a bit wider if possible to not squeeze content too much
+%           my $max = RT->Config->Get('DashboardTestEmailLimit') || 50;
+          <&|/l_unsafe,
+              qq!<input size="@{[1+length $max]}" type="number" min="1" max="@{[ $max ]}" class="form-control w-auto d-inline-block" name="SendTestEmailToFirst" value="@{[ $ARGS{'SendTestEmailToFirst'} || 1 ]}" />!,
+              $max, &>First [_1] recipient(s) from the list above (Max: [_2])</&>
+        </label>
+      </div>
+      <input name="SendTestEmailToFirstRecipients" type="hidden" value="" />
+      <div class="send-test-email-type-first-details hidden">
+        <p class="mt-1 mb-0 ms-4"><&|/l&>Recipient list</&>:</p>
+        <ol class="list-group-compact">
+%         for my $user ( @current_recipient_list ) {
+          <li class="list-group-item marker" data-id="<% $user->Id %>">
+            <& /Elements/ShowUser, User => $user, LinkTarget => '_blank' &>
+          </li>
+%         }
+        </ol>
+      </div>
+    </&>
+    <& /Elements/Submit, Name => 'SendTestEmail', Label => loc('Send Test Email'), FullWidth => 1 &>
+    <script type="text/javascript">
+        jQuery('input[name=SendTestEmailType]').change(function() {
+            jQuery('.send-test-email-type-first-details').toggleClass('hidden', jQuery(this).val() !== 'first');
+        }).filter(':checked').change();
+
+        jQuery('input[name=SendTestEmailToFirst]').change(function() {
+            var selected = jQuery('.send-test-email-type-first-details li').slice(0, jQuery(this).val());
+            selected.removeClass('hidden');
+            jQuery('input[name=SendTestEmailToFirstRecipients]').val(
+                selected.map(function() { return jQuery(this).data('id') }).get().join(',')
+            );
+
+            jQuery('.send-test-email-type-first-details li').slice(jQuery(this).val()).addClass('hidden');
+        }).change();
+    </script>
+  </&>
+% }
+
+</form>
+
+<%INIT>
+use List::MoreUtils 'uniq';
+
+my ($title, @results);
+my $Loaded = 0;
+my $timezone = $session{'CurrentUser'}->UserObj->Timezone || RT->Config->Get('Timezone');
+
+use RT::Dashboard;
+my $Dashboard = RT::Dashboard->new($session{'CurrentUser'});
+my ($ok, $msg) = $Dashboard->LoadById($id);
+unless ($ok) {
+    RT::Logger->error("Unable to load dashboard with $id: $msg");
+    Abort(loc("Could not load dashboard [_1]", $id), Code => HTTP::Status::HTTP_NOT_FOUND);
+}
+
+Abort('Permission Denied') unless $Dashboard->CurrentUserCanSee;
+
+my $SubscriptionObj = $Dashboard->Subscription;
+
+my %fields = (
+    Frequency   => 'daily',
+    Monday      => 1,
+    Tuesday     => 1,
+    Wednesday   => 1,
+    Thursday    => 1,
+    Friday      => 1,
+    Saturday    => 0,
+    Sunday      => 0,
+    Hour        => '06:00',
+    Dow         => 'Monday',
+    Dom         => 1,
+    Rows        => '',
+    Recipients  => { Users => [], Groups => [] },
+    Fow         => 1,
+    Counter     => 0,
+    Language    => '',
+    SuppressIfEmpty => 0,
+    Context     => 'subscriber',
+);
+
+$m->callback( %ARGS, CallbackName => 'SubscriptionFields', FieldsRef => \%fields,
+     SubscriptionObj => $SubscriptionObj, DashboardObj => $Dashboard);
+
+# update any fields with the values from the subscription object
+if ($SubscriptionObj) {
+    my $content = $SubscriptionObj->Content || {};
+    for my $field (keys %fields) {
+        $fields{$field} = $content->{$field};
+    }
+    $ARGS{Disabled} = $SubscriptionObj->Disabled ? 1 : 0;
+}
+
+# finally, update any fields with arguments passed in by the user
+for my $field (keys %fields) {
+    $fields{$field} = $ARGS{$field}
+        if defined($ARGS{$field}) || $ARGS{$field.'-Magic'};
+}
+
+$ARGS{Disabled} = $ARGS{Enabled} ? 0 : 1 if $ARGS{SetEnabled};
+
+
+$m->callback( %ARGS, CallbackName => 'MassageSubscriptionFields', FieldsRef => \%fields,
+     SubscriptionObj => $SubscriptionObj, DashboardObj => $Dashboard);
+
+# this'll be defined on submit
+if (defined $ARGS{Save}) {
+    # update recipients
+    for my $key (keys %ARGS) {
+        my $val = $ARGS{$key};
+        if ( $key =~ /^Dashboard-Subscription-Email-\d+$/ && $val ) {
+            my @recipients = @{ $fields{Recipients}->{Users} };
+
+            for ( RT::EmailParser->ParseEmailAddress( $val ) ) {
+                my $email = $_->address;
+
+                my $user = RT::User->new(RT->SystemUser);
+                ($ok, $msg) = $user->LoadOrCreateByEmail(
+                    EmailAddress => $email,
+                    Comments     => 'Autocreated when added as a dashboard subscription recipient',
+                );
+
+                unless ($ok) {
+                    push @results, loc("Could not add [_1] as a recipient: [_2]", $email, $msg);
+                    next;
+                }
+
+                my $is_prev_recipient = grep { $_ == $user->id } @recipients;
+                next if $is_prev_recipient;
+
+                push @recipients, $user->id;
+                push @results, loc("[_1] added to dashboard subscription recipients", $email);
+            }
+            @{ $fields{Recipients}->{Users} } = uniq @recipients;
+
+        } elsif ($key =~ /^Dashboard-Subscription-(Users|Groups)-(\d+)$/) {
+            my ($mode, $type, $id) = ('', $1, $2);
+            my @recipients = @{ $fields{Recipients}->{$type} };
+
+            # find out proper value for user/group checkbox
+            my $add_keep_recipient = ref $ARGS{$key} eq 'ARRAY' ?
+                grep { $_ } @{ $ARGS{$key} } :
+                $ARGS{$key};
+
+            my $record; # hold user/group object
+            if ($type eq 'Users') {
+                my $user = RT::User->new($session{CurrentUser});
+                $user->Load( $id );
+                $record = $user;
+            } elsif ($type eq 'Groups') {
+                my $group = RT::Group->new($session{CurrentUser});
+                $group->Load( $id );
+                $record = $group;
+            }
+
+            my $is_prev_recipient = grep { $_ == $id } @recipients;
+
+            if ($add_keep_recipient and not $is_prev_recipient) { # Add User/Group
+                push @recipients, $id;
+                push @results, loc("[_1] added to dashboard subscription recipients", $record->Name);
+            } elsif (not $add_keep_recipient and $is_prev_recipient) { # Remove User/Group
+                @recipients = grep { $_ != $id } @recipients;
+                push @results, loc("[_1] removed from dashboard subscription recipients", $record->Name);
+            }
+
+            @{ $fields{Recipients}->{$type} } = uniq @recipients;
+        }
+    }
+
+    # update
+    if ($SubscriptionObj) {
+        if ( $ARGS{Disabled} ne $SubscriptionObj->Disabled ) {
+            ( $ok, $msg ) = $SubscriptionObj->SetDisabled( $ARGS{Disabled} );
+            push @results, $msg unless $ok;
+        }
+        ($ok, $msg) = $SubscriptionObj->SetContent(\%fields);
+        $msg = loc("Subscription updated") if $ok;
+        push @results, $msg;
+    }
+    # create
+    else {
+        Abort(loc("Unable to subscribe to dashboard [_1]: Permission Denied", $id))
+            unless $Dashboard->CurrentUserCanSubscribe;
+
+        $SubscriptionObj = RT::DashboardSubscription->new($session{CurrentUser});
+        ($ok, $msg) = $SubscriptionObj->Create(
+            DashboardId => $id,
+            Content     => \%fields,
+            Disabled    => $ARGS{Disabled},
+        );
+        if ($ok) {
+            push @results, loc("Subscribed to dashboard [_1]", $Dashboard->Name);
+        }
+        else {
+            push @results, loc('Subscription could not be created: [_1]', $msg);
+        }
+    }
+    push @results, loc("Warning: This dashboard has no recipients")
+        unless @{ $fields{Recipients}->{Users} } || @{ $fields{Recipients}->{Groups} };
+} elsif (defined $ARGS{OnlySearchForPeople}) {
+    $GroupString = undef;
+    $GroupField = undef;
+    $GroupOp = undef;
+} elsif (defined $ARGS{OnlySearchForGroup}) {
+    $UserString = undef;
+    $UserField = undef;
+    $UserOp = undef;
+} elsif ( $ARGS{SendTestEmail} ) {
+    if ($SubscriptionObj) {
+        if ( my $type = $ARGS{SendTestEmailType} ) {
+            my @recipients;
+            if ( $type eq 'me' ) {
+                push @recipients, $session{CurrentUser}->EmailAddress;
+            }
+            elsif ( $type eq 'custom' ) {
+                if ( $ARGS{SendTestEmailToCustom} ) {
+                    push @recipients, $ARGS{SendTestEmailToCustom};
+                }
+                else {
+                    push @results, loc('Empty email address');
+                }
+            }
+            elsif ( $type eq 'first' ) {
+                if ( my $emails = $ARGS{SendTestEmailToFirstRecipients} ) {
+                    @recipients = split /,/, $emails;
+                    my $limit = RT->Config->Get('DashboardTestEmailLimit') || 50;
+                    if ( @recipients > $limit ) {
+                        push @results, loc( 'Number of recipients exceeds limit([_1])', $limit );
+                        @recipients = ();
+                    }
+                }
+                else {
+                    push @results, loc('Empty number of recipients');
+                }
+            }
+            else {
+                # should not be here
+            }
+
+            if (@recipients) {
+                require RT::Dashboard::Mailer;
+                local $RT::Config::OVERRIDDEN_OPTIONS{InlineEdit} = 0;
+                RT::Dashboard::Mailer->MailDashboards(
+                    Subscription => $SubscriptionObj,
+                    Test         => 1,
+                    Recipients   => \@recipients,
+                );
+                push @results, loc('Test dashboard email sent');
+            }
+        }
+    }
+}
+
+my @current_recipient_list;
+
+if ($SubscriptionObj) {
+    $title = loc("Modify the subscription to dashboard [_1]", $Dashboard->Name);
+
+    my %exist;
+    push @current_recipient_list, $session{CurrentUser}->UserObj;
+    $exist{$session{CurrentUser}->Id} = 1;
+
+    my $limit = RT->Config->Get('DashboardTestEmailLimit') || 50;
+
+    if ( @current_recipient_list < $limit ) {
+        for my $user_id ( @{$fields{Recipients}{Users} || []} ) {
+            next if $exist{$user_id}++;
+
+            my $user = RT::User->new($session{CurrentUser});
+            $user->Load($user_id);
+            if ( $user->Id && !$user->Disabled ) {
+                push @current_recipient_list, $user;
+                last if @current_recipient_list == $limit;
+            }
+        }
+    }
+
+    if ( @current_recipient_list < $limit ) {
+        for my $group_id ( @{ $fields{Recipients}{Groups} || [] } ) {
+            my $group = RT::Group->new( $session{CurrentUser} );
+            $group->Load($group_id);
+            if ( $group->Id ) {
+                my $users = $group->UserMembersObj;
+                while ( my $user = $users->Next ) {
+                    next if $exist{ $user->Id }++;
+                    push @current_recipient_list, $user;
+                    last if @current_recipient_list == $limit;
+                }
+            }
+            else {
+                RT->Logger->warning("Couldn't load group $group_id");
+            }
+        }
+    }
+}
+else {
+    $title = loc("Subscribe to dashboard [_1]", $Dashboard->Name);
+}
+
+</%INIT>
+<%ARGS>
+$id => undef
+$Frequency   => undef
+$Hour        => undef
+$Dow         => undef
+$Dom         => undef
+$Rows        => undef
+$Recipient   => undef
+$Language    => undef
+
+$UserField => undef
+$UserOp => undef
+$UserString => undef
+$GroupField => undef
+$GroupOp => undef
+$GroupString => undef
+</%ARGS>
+

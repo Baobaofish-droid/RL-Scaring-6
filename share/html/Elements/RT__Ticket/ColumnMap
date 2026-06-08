@@ -1,0 +1,498 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%ARGS>
+$Name => undef
+$Attr => undef
+$GenericMap => {}
+</%ARGS>
+
+
+<%ONCE>
+my $COLUMN_MAP;
+
+my $LinkCallback = sub {
+    my $method = shift;
+
+    my $mode            = $RT::Link::TYPEMAP{$method}{Mode};
+    my $type            = $RT::Link::TYPEMAP{$method}{Type};
+    my $other_mode      = ($mode eq "Target" ? "Base" : "Target");
+    my $mode_uri        = $mode.'URI';
+
+    return sub {
+        my $ObjectType = $_[2]||'';
+        map {
+            \'<a href="',
+            $_->$mode_uri->AsHREF,
+            \'">',
+            ( $_->$mode_uri->AsString ),
+            \'</a><br />',
+        } # if someone says __RefersTo.{Ticket}__ filter for only local links that are tickets
+          grep { $ObjectType
+                    ? ( $_->$mode_uri->IsLocal
+                        && ( $_->$mode_uri->Object->RecordType eq $ObjectType ))
+                    : 1
+               }
+          @{ $_[0]->Links($other_mode,$type)->ItemsArrayRef }
+    }
+};
+
+my $trustSub = sub {
+    my $queue = shift;
+    my $user = shift;
+    my %key = RT::Crypt->GetKeyInfo( Key => $user->EmailAddress, Queue => $queue );
+    if (!defined $key{'info'}) {
+        return $m->interp->apply_escapes(' ' . loc("(no pubkey!)"), "h");
+    } elsif ($key{'info'}{'TrustLevel'} == 0) {
+        return $m->interp->apply_escapes(' ' . loc("(untrusted!)"), "h");
+    }
+};
+
+$COLUMN_MAP = {
+    Queue => {
+        attribute => 'Queue',
+        title     => 'Queue id', # loc
+        value     => sub { return $_[0]->Queue },
+        edit      => sub { return \($m->scomp('/Elements/SelectQueue', Default => $_[0]->Queue, Name => 'Queue', ShowNullOption => 0)) },
+    },
+    QueueName => {
+        attribute => 'Queue',
+        title     => 'Queue', # loc
+        value     => sub { return $_[0]->QueueObj->Name },
+        edit      => sub { return \($m->scomp('/Elements/SelectQueue', Default => $_[0]->Queue, Name => 'Queue', ShowNullOption => 0)) },
+    },
+    OwnerName =>  {
+        title     => 'Owner', # loc
+        attribute => 'Owner',
+        value     => sub { return \($m->scomp("/Elements/ShowUser", User => $_[0]->OwnerObj, ShowDisabledLabel => 1)) },
+    },
+    OwnerNameEdit => {
+        title     => 'Owner', # loc
+        attribute => 'Owner',
+        value     => sub { return $_[0]->OwnerObj->Name },
+        edit      => sub { return \($m->scomp('/Elements/SelectOwner', TicketObj => $_[0], Name => 'Owner', Default => $_[0]->OwnerObj->Id, DefaultValue => 0, Delay => 1)) },
+    },
+    Status => {
+        title     => 'Status', # loc
+        attribute => 'Status',
+        value     => sub { return \($m->scomp('/Elements/StatusBadge', Object => $_[0])) },
+        edit      => sub { return \($m->scomp("/Ticket/Elements/SelectStatus", TicketObj => $_[0], Name => 'Status' ) ) },
+    },
+    Subject => {
+        title     => 'Subject', # loc
+        attribute => 'Subject',
+        value     => sub { return $_[0]->Subject || "(" . loc('No subject') . ")" },
+        edit      => sub { return \('<input name="Subject" aria-label="Subject" class="form-control" value="'.$m->interp->apply_escapes( $_[0]->Subject, 'h' ).'" />') },
+    },
+    Description => {
+        title     => 'Description', # loc
+        attribute => 'Description',
+        sortable  => 0,
+        value     => sub { return \(ScrubHTML($_[0]->Description)) },
+        edit      => sub {
+            my $href = RT->Config->Get('WebPath') . '/Helpers/EditTicketDescription?id=' . $_[0]->Id;
+            return \(qq{<span class="inline-edit-modal" data-link="$href"></span>});
+        },
+    },
+    Reply => {
+        title    => 'Reply', # loc
+        sortable => 0,
+        value    => sub {
+            my $Ticket = $_[0];
+            return ''
+                unless $Ticket->CurrentUserHasRight('ReplyToTicket') || $Ticket->CurrentUserHasRight('ModifyTicket');
+
+            my $id     = $Ticket->Id;
+            my $href = RT->Config->Get('WebPath') . "/Helpers/AddTicketMessage?id=$id&UpdateType=response";
+            return \( qq{<div class="editable d-grid gap-2"><button type="button" class="inline-edit-modal edit-icon btn btn-primary rt-btn-x-sm m-1" data-link="$href" data-bs-toggle="tooltip" data-bs-title="} . loc('Reply to requestors') . q{">} . loc('Reply') . '</button></div>' );
+        },
+    },
+    Comment => {
+        title    => 'Comment', # loc
+        sortable => 0,
+        value    => sub {
+            my $Ticket = $_[0];
+            return ''
+                unless $Ticket->CurrentUserHasRight('CommentOnTicket') || $Ticket->CurrentUserHasRight('ModifyTicket');
+
+            my $id     = $Ticket->Id;
+            my $href = RT->Config->Get('WebPath') . "/Helpers/AddTicketMessage?id=$id&UpdateType=private";
+            return \( qq{<div class="editable d-grid gap-2"><button type="button" class="inline-edit-modal edit-icon btn btn-primary rt-btn-x-sm m-1" data-link="$href" data-bs-toggle="tooltip" data-bs-title="} . loc('Not sent to requestors') . q{">} . loc('Comment') . '</button></div>' );
+        },
+    },
+    ExtendedStatus => {
+        title     => 'Status', # loc
+        attribute => 'Status',
+        value     => sub {
+            my $Ticket = shift;
+
+            my $unresolved_dependencies = $Ticket->UnresolvedDependencies;
+            my $count = $unresolved_dependencies->Count;
+            if ( $count ) {
+                if (   $Ticket->HasUnresolvedDependencies( Type => 'approval' )
+                    or $Ticket->HasUnresolvedDependencies( Type => 'code' ) )
+                {
+                    return \'<em>', loc('(pending approval)'), \'</em>';
+                }
+                else {
+                    my $Query = "DependedOnBy = " . $Ticket->id . " AND Status = '__Active__'";
+                    my $SearchURL = RT->Config->Get('WebPath') . '/Search/Results.html?' . $m->comp('/Elements/QueryString', Query => $Query);
+
+                    if ($count == 1) {
+                        # Count can be 1 but when UseSQLForACLChecks is set to 0 the rights check hasn't been
+                        # peformed yet, meaning the current user may not be able to see the linked ticket.
+                        # Therefore we need to check if a ticket is actually found.
+                        my $pending_ticket = $unresolved_dependencies->Next;
+                        if ($pending_ticket) {
+                            my $pending_ticket_url = RT->Config->Get('WebPath') . '/Ticket/Display.html?id=' . $pending_ticket->id;
+                            return \'<a href="',$pending_ticket_url,\'">', loc('(pending ticket #[_1])',$pending_ticket->id), \'</a>';
+                        }
+                    }
+
+                    return \'<a href="',$SearchURL,\'">', loc('(pending [quant,_1,other ticket,other tickets])',$count), \'</a>';
+                }
+            }
+            else {
+                return \($m->scomp('/Elements/StatusBadge', Object => $Ticket));
+            }
+
+        },
+        edit      => sub { return \($m->scomp("/Ticket/Elements/SelectStatus", TicketObj => $_[0], Name => 'Status' ) ) },
+    },
+    Priority => {
+        title     => 'Priority', # loc
+        attribute => 'Priority',
+        value     => sub { return $_[0]->Priority },
+        edit      => sub { return \($m->scomp('/Elements/SelectPriority', Name => 'Priority', Default => $_[0]->Priority, QueueObj => $_[0]->QueueObj )) },
+    },
+    InitialPriority => {
+        title     => 'InitialPriority', # loc
+        attribute => 'InitialPriority',
+        name      => 'Initial Priority',
+        value     => sub { return $_[0]->InitialPriority },
+        edit      => sub { return \($m->scomp('/Elements/SelectPriority', Name => 'InitialPriority', Default => $_[0]->InitialPriority, QueueObj => $_[0]->QueueObj)) },
+    },
+    FinalPriority => {
+        title     => 'FinalPriority', # loc
+        attribute => 'FinalPriority',
+        name      => 'Final Priority',
+        value     => sub { return $_[0]->FinalPriority },
+        edit      => sub { return \($m->scomp('/Elements/SelectPriority', Name => 'FinalPriority', Default => $_[0]->FinalPriority, QueueObj => $_[0]->QueueObj)) },
+    },
+    EffectiveId => {
+        title     => 'EffectiveId', # loc
+        attribute => 'EffectiveId',
+        value     => sub { return $_[0]->EffectiveId }
+    },
+    Type => {
+        title     => 'Type', # loc
+        attribute => 'Type',
+        value     => sub { return $_[0]->Type }
+    },
+    TimeWorked => {
+        attribute => 'TimeWorked',
+        title     => 'Time Worked', # loc
+        value     => sub { return $_[0]->TimeWorkedAsString },
+        edit      => sub { return \($m->scomp('/Elements/EditTimeValue', Name => 'TimeWorked', Default => $_[0]->TimeWorked)) },
+    },
+    TimeLeft => {
+        attribute => 'TimeLeft',
+        title     => 'Time Left', # loc
+        value     => sub { return $_[0]->TimeLeftAsString },
+        edit      => sub { return \($m->scomp('/Elements/EditTimeValue', Name => 'TimeLeft', Default => $_[0]->TimeLeft)) },
+    },
+    TimeEstimated => {
+        attribute => 'TimeEstimated',
+        title     => 'Time Estimated', # loc
+        value     => sub { return $_[0]->TimeEstimatedAsString },
+        edit      => sub { return \($m->scomp('/Elements/EditTimeValue', Name => 'TimeEstimated', Default => $_[0]->TimeEstimated)) },
+    },
+    StartsRelative => {
+        title     => 'Starts', # loc
+        attribute => 'Starts',
+        value     => sub { return $_[0]->StartsObj->AgeAsString },
+        edit      => sub { return \($m->scomp('/Elements/SelectDate', menu_prefix => 'Starts', id => '', current => 0, Default => $_[0]->StartsObj->Unix ? $_[0]->StartsObj->ISO( Timezone => 'user' ) : '')) },
+    },
+    StartedRelative => {
+        title     => 'Started', # loc
+        attribute => 'Started',
+        value     => sub { return $_[0]->StartedObj->AgeAsString },
+        edit      => sub { return \($m->scomp('/Elements/SelectDate', menu_prefix => 'Started', id => '', current => 0, Default => $_[0]->StartedObj->Unix ? $_[0]->StartedObj->ISO( Timezone => 'user' ) : '')) },
+    },
+    ToldRelative => {
+        title     => 'Told', # loc
+        attribute => 'Told',
+        value     => sub { return $_[0]->ToldObj->AgeAsString },
+        edit      => sub { return \($m->scomp('/Elements/SelectDate', menu_prefix => 'Told', id => '', current => 0, Default => $_[0]->ToldObj->Unix ? $_[0]->ToldObj->ISO( Timezone => 'user' ) : '')) },
+    },
+    DueRelative => {
+        title     => 'Due', # loc
+        attribute => 'Due',
+        value     => sub { 
+            my $date = $_[0]->DueObj;
+            # Highlight the date if it was due in the past, and it's still active
+            if ( $date && $date->IsSet && $date->Diff < 0 && $_[0]->QueueObj->IsActiveStatus($_[0]->Status)) {
+                return (\'<span class="overdue">' , $date->AgeAsString , \'</span>');
+            } else {
+                return $date->AgeAsString;
+            }
+        },
+        edit      => sub { return \($m->scomp('/Elements/SelectDate', menu_prefix => 'Due', id => '', current => 0, Default => $_[0]->DueObj->Unix ? $_[0]->DueObj->ISO( Timezone => 'user' ) : '')) },
+    },
+    ResolvedRelative => {
+        title     => 'Resolved', # loc
+        attribute => 'Resolved',
+        value     => sub { return $_[0]->ResolvedObj->AgeAsString }
+    },
+    Starts => {
+        title     => 'Starts', # loc
+        attribute => 'Starts',
+        value     => sub { return $_[0]->StartsObj->AsString },
+        edit      => sub { return \($m->scomp('/Elements/SelectDate', menu_prefix => 'Starts', id => '', current => 0, Default => $_[0]->StartsObj->Unix ? $_[0]->StartsObj->ISO( Timezone => 'user' ) : '')) },
+    },
+    Started => {
+        title     => 'Started', # loc
+        attribute => 'Started',
+        value     => sub { return $_[0]->StartedObj->AsString },
+        edit      => sub { return \($m->scomp('/Elements/SelectDate', menu_prefix => 'Started', id => '', current => 0, Default => $_[0]->StartedObj->Unix ? $_[0]->StartedObj->ISO( Timezone => 'user' ) : '')) },
+    },
+    Told => {
+        title     => 'Told', # loc
+        attribute => 'Told',
+        value     => sub { return $_[0]->ToldObj->AsString },
+        edit      => sub { return \($m->scomp('/Elements/SelectDate', menu_prefix => 'Told', id => '', current => 0, Default => $_[0]->ToldObj->Unix ? $_[0]->ToldObj->ISO( Timezone => 'user' ) : '')) },
+    },
+    Due => {
+        title     => 'Due', # loc
+        attribute => 'Due',
+        value     => sub {
+            my $date = $_[0]->DueObj;
+            # Highlight the date if it was due in the past, and it's still active
+            if ( $date && $date->IsSet && $date->Diff < 0 && $_[0]->QueueObj->IsActiveStatus($_[0]->Status)) {
+                return (\'<span class="overdue">' , $date->AsString , \'</span>');
+            } else {
+                return $date->AsString;
+            }
+        },
+        edit      => sub { return \($m->scomp('/Elements/SelectDate', menu_prefix => 'Due', id => '', current => 0, Default => $_[0]->DueObj->Unix ? $_[0]->DueObj->ISO( Timezone => 'user' ) : '')) },
+    },
+    Resolved => {
+        title     => 'Resolved', # loc
+        attribute => 'Resolved',
+        value     => sub { return $_[0]->ResolvedObj->AsString }
+    },
+    SLA => {
+        attribute => 'SLA',
+        title     => 'SLA', # loc
+        value     => sub { return $_[0]->SLA },
+        edit      => sub { return \($m->scomp('/Elements/SelectSLA', TicketObj => $_[0], DefaultFromArgs => 0)) },
+    },
+    UpdateStatus => {
+        title => 'New messages', # loc
+        value => sub {
+            my $txn = $_[0]->SeenUpTo or return $_[0]->loc('No');
+            return \('<a href="'. RT->Config->Get('WebPath') .'/Ticket/Display.html?id='
+                . $_[0]->id .'#txn-'. $txn->id .'">'),
+                $_[0]->loc('New'), \'</a>';
+        },
+    },
+    KeyRequestors => {
+        title     => 'Requestors', # loc
+        attribute => 'Requestor.EmailAddress',
+        value     => sub { my $ticket = $_[0]; return \($m->scomp("/Elements/ShowPrincipal", Object => $ticket->Requestor, PostUser => sub { my $user = shift; return $trustSub->($ticket->QueueObj, $user); }))}
+    },
+    KeyOwnerName => {
+        title     => 'Owner', # loc
+        attribute => 'Owner',
+        value     => sub {
+            my $t = shift;
+            my $name = $t->OwnerObj->Name;
+            my %key = RT::Crypt->GetKeyInfo( Key => $t->OwnerObj->EmailAddress, Queue => $t->QueueObj );
+            if (!defined $key{'info'}) {
+                $name .= ' '. loc("(no pubkey!)");
+            }
+            elsif ($key{'info'}{'TrustLevel'} == 0) {
+                $name .= ' '. loc("(untrusted!)");
+            }
+
+            return $name;
+        }
+    },
+    KeyOwner => {
+        title     => 'Owner', # loc
+        attribute => 'Owner',
+        value     => sub {
+            my $ticket = $_[0]; return \($m->scomp("/Elements/ShowPrincipal", Object => $ticket->OwnerObj, PostUser => sub { my $user = shift; return $trustSub->($ticket->QueueObj, $user); }))},
+    },
+
+    # Everything from LINKTYPEMAP
+    (map {
+        $_ => { value => $LinkCallback->( $_ ) }
+    } keys %RT::Link::TYPEMAP),
+
+    '_CLASS' => {
+        value => sub { return $_[1] % 2 ? 'oddline' : 'evenline' }
+    },
+    '_CHECKBOX' => {
+        attribute => 'checkbox',
+        title => 'Update', # loc
+        align     => 'right',
+        value     => sub {
+            my $name = 'UpdateTicket' . $_[0]->id;
+            return \qq{
+<div class="form-check">
+  <input type="checkbox" name="$name" id="$name" value="1" class="checkbox form-check-input" checked="checked" />
+  <label class="form-check-label" for="$name"></label>
+</div>};
+        }
+    },
+
+    Bookmark => {
+        title => ' ',
+        value => sub {
+            my $bookmark = $m->scomp( '/Ticket/Elements/Bookmark', id => $_[0]->id );
+            # the CollectionAsTable/Row template replaces newlines with <br>
+            $bookmark =~ s/\n//g;
+
+            return \$bookmark;
+        },
+    },
+
+    Timer => {
+        title => ' ',
+        value => sub {
+            return \($m->scomp("/Ticket/Elements/PopupTimerLink", id => $_[0]->id, TicketObj => $_[0] ) );
+        },
+    },
+    UnreadMessages => {
+       title     => 'Unread Messages', # loc
+       value     => sub {
+            my $self = shift;
+
+            my ( $first_unread, $count ) = $self->SeenUpTo;
+
+            return '0' if !$count;
+
+            my $link = RT->Config->Get('WebPath');
+            $link .= $session{'CurrentUser'}->Privileged ? '/Ticket/Display.html?id=' : '/SelfService/Display.html?id=';
+            $link .= $self->id . '&MarkAsSeen=1&Anchor=txn-' . $first_unread->id;
+
+            my $title = loc("Jump to Unread &amp; Mark as Seen");
+            return \( '<a data-bs-toggle="tooltip" data-bs-title="' . $title . '" href="' . $link . '"><b>' ),
+                $count, \'</b></a>';
+        }
+   }
+};
+
+</%ONCE>
+<%init>
+# if no encryption support, then KeyOwnerName and KeyRequestors fall back to the regular
+# versions
+unless (RT->Config->Get('Crypt')->{'Enable'}) {
+    $COLUMN_MAP->{KeyOwnerName}  = $COLUMN_MAP->{OwnerName};
+    $COLUMN_MAP->{KeyRequestors} = $GenericMap->{Requestors};
+}
+
+if(RT->Config->Get('DisplayTotalTimeWorked')) {
+  $COLUMN_MAP->{TotalTimeWorked} = {
+        attribute => 'TotalTimeWorked',
+        title => 'Total Time Worked',
+        value => sub {
+            return $_[0]->TotalTimeWorkedAsString;
+        },
+    }
+}
+
+if ( RT->Config->Get('EnablePriorityAsString') ) {
+    my $printer = sub {
+        my ( $class, $string ) = @_;
+        return '' unless defined $string && length $string;
+
+        my $request_path = $HTML::Mason::Commands::r->path_info // '';
+        if ( $request_path =~ /Results\.tsv/ ) {
+            return loc($string);
+        }
+
+        my $escaped     = $m->interp->apply_escapes( $string,      'h' );
+        my $loc_escaped = $m->interp->apply_escapes( loc($string), 'h' );
+
+        return \( qq{<span class="ticket-info-$class-} . CSSClass(lc($escaped)) . qq{">$loc_escaped</span>} );
+
+    };
+    foreach my $field (qw(Priority InitialPriority FinalPriority)) {
+        $COLUMN_MAP->{ $field . 'Number' } ||= $COLUMN_MAP->{$field};
+
+        my $class = lc($field);
+        $class =~ s/(?=<.)(?=priority)/-/;
+
+        my $method = $field . 'AsString';
+
+        $COLUMN_MAP->{$field}{'value'} = sub {
+            # Fallback to numbers when the queue disables PriorityAsString
+            return $printer->( $class, $_[0]->$method() ) || $_[0]->$field;
+        };
+    }
+}
+
+my $ranges = $m->notes('custom_date_ranges');
+if ( !$ranges ) {
+    $ranges = { RT::Ticket->CustomDateRanges };
+    $m->notes( custom_date_ranges => $ranges );
+}
+
+for my $name (keys %$ranges) {
+    $COLUMN_MAP->{$name} = {
+        title => $name,
+        value => sub {
+            $_[0]->CustomDateRange($name, $ranges->{$name});
+        },
+    };
+}
+
+$m->callback( GenericMap => $GenericMap, COLUMN_MAP => $COLUMN_MAP, CallbackName => 'Once', CallbackOnce => 1 );
+return GetColumnMapEntry( Map => $COLUMN_MAP, Name => $Name, Attribute => $Attr );
+</%init>

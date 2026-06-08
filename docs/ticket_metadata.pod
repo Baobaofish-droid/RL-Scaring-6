@@ -1,0 +1,277 @@
+=head1 Introduction
+
+This document describes the metadata fields on RT tickets. These fields
+appear on the ticket display page and store information about each ticket.
+Understanding these fields helps you use RT effectively.
+
+=head1 The Basics
+
+The Basics section contains the core identifying information for a ticket.
+
+=head2 id
+
+A unique number assigned to each ticket when it is created. Ticket IDs
+are assigned sequentially and never reused.
+
+=head2 Subject
+
+The title of the ticket. This appears in search results, email subject
+lines, and at the top of the ticket display page.
+
+=head2 Description
+
+An optional field for recording the main purpose or summary of the ticket.
+This is useful for project management workflows where tickets represent
+tasks or work items that benefit from a longer description beyond the
+subject line.
+
+=head2 Queue
+
+The queue the ticket belongs to. Queues organize tickets by team,
+department, or workflow. Moving a ticket to a different queue may change
+the available statuses, custom fields, and staff who can access it.
+
+=head2 Status
+
+The current state of the ticket in its workflow. Common statuses include
+new, open, stalled, resolved, and rejected. The available statuses depend
+on the queue's lifecycle configuration.
+
+=head2 Owner
+
+The user responsible for working on the ticket. A ticket can have only
+one owner, and it must be a user (not a group). Unassigned tickets show
+"Nobody" as the owner.
+
+=head2 Priority
+
+The ticket's importance level. By default, RT displays priority as Low,
+Medium, or High. Internally, priorities are stored as numbers (0-99),
+which allows for automatic escalation over time, but most users only
+see the text labels.
+
+=head2 InitialPriority
+
+The priority assigned when the ticket was created. This value is preserved
+even if the current priority changes.
+
+=head2 FinalPriority
+
+The target priority for the ticket when it reaches its due date. Some RT
+configurations automatically escalate priority from InitialPriority toward
+FinalPriority as the due date approaches.
+
+=head2 SLA
+
+The Service Level Agreement assigned to the ticket. SLAs define response
+and resolution time targets. When an SLA is set, RT can automatically
+calculate the Due date and track whether targets are being met. See
+L<SLA Configuration|docs/customizing/sla.pod> for more information.
+
+=head1 Time
+
+The Time section tracks time spent on a ticket.
+
+=head2 TimeEstimated
+
+The estimated time to complete the ticket. This is set manually and helps
+with planning and workload management.
+
+=head2 TimeWorked
+
+The total time spent working on the ticket. When adding time, use the
+"Add to time worked" field rather than setting TimeWorked directly. Time
+can be added in the Time widget on the ticket display page, on the update
+page when making a comment or reply, or by using the ticket timer.
+
+=head2 TimeLeft
+
+The remaining time to complete the ticket. This is typically calculated
+as TimeEstimated minus TimeWorked, but can also be set manually.
+
+=head2 Total Time Worked
+
+A calculated value showing the sum of TimeWorked for the ticket and all
+its child tickets. This value updates automatically when child tickets
+are added or removed. Only parent/child relationships are included;
+tickets linked with depends-on or refers-to are not counted. Total Time
+Worked is also available as a column in Query Builder reports.
+
+=head1 People
+
+The People section shows all users associated with the ticket through
+roles. Roles determine who receives notifications and who can perform
+certain actions.
+
+All roles except Owner can accept both users and groups as values. When
+using the autocomplete to add someone to a role, matching users appear
+first, then groups. To see only groups, type "group:" in the search box.
+
+=head2 Requestor
+
+The person who submitted the ticket or on whose behalf it was created.
+A ticket can have multiple requestors. Correspondence sent from the
+ticket goes to all requestors.
+
+=head2 Cc
+
+Additional parties who receive copies of all correspondence on the
+ticket. Cc recipients are visible in email headers to requestors and
+other external users.
+
+=head2 AdminCc
+
+Administrative recipients who receive all ticket updates, including
+internal comments. AdminCc recipients are typically internal staff
+and are not visible to requestors.
+
+=head2 Custom Roles
+
+Additional roles defined by your organization. Like the core roles,
+custom roles track people associated with tickets. Examples include
+Approver, Manager, or Technical Contact. Custom roles can allow a
+single user (like Owner) or multiple users (like Cc).
+
+=head1 Dates
+
+The Dates section tracks important timestamps in the ticket's lifecycle.
+Some dates are set automatically by RT, while others can be set manually.
+
+=head2 Created
+
+The date and time the ticket was created. Set automatically and cannot
+be changed.
+
+=head2 Starts
+
+The date when work on the ticket should begin. Set manually to help
+with scheduling and planning.
+
+=head2 Started
+
+The date when work on the ticket actually began. Set automatically when
+the ticket transitions from an initial status to an active status. In
+the default lifecycle, this happens when a ticket moves from new to open.
+This is often used to measure response time - how long between ticket
+creation and when staff began working on it.
+
+=head2 Due
+
+The deadline for completing the ticket. Set manually or automatically
+based on SLA rules. Overdue tickets can be highlighted in search results.
+
+=head2 Told (Last Contact)
+
+The date staff last replied to the ticket. Updated automatically when
+correspondence is sent by someone other than a requestor. This is used
+to track when customers were last contacted, which is useful for response
+SLAs that require staff to reply within a certain time frame. Displayed
+as "Last Contact" in the interface.
+
+=head2 Resolved
+
+The date the ticket was closed. Set automatically when the ticket moves
+to an inactive status like resolved or rejected.
+
+=head2 LastUpdated
+
+The date and time of the most recent change to the ticket. Any
+modification updates this field, including replies, comments, status
+changes, or metadata updates.
+
+=head1 Links
+
+Links create relationships between tickets and other objects. While
+links are commonly used between RT tickets, you can link to any URL
+including external wikis, documentation, or other ticketing systems.
+Links help organize related work and can enforce workflow constraints.
+
+=head2 Parents and Children
+
+A hierarchical relationship for organizing tickets. Parent tickets
+contain child tickets, useful for breaking large tasks into subtasks.
+This relationship does not enforce any resolution order. Time worked
+on child tickets is automatically summed and displayed as Total Time
+Worked on the parent ticket.
+
+=head2 Depends On and Depended On By
+
+A dependency relationship that enforces resolution order. A ticket
+cannot be resolved while it still depends on unresolved tickets. Use
+this for tasks that must be completed in a specific sequence.
+
+=head2 Refers To and Referred To By
+
+A simple reference relationship indicating related tickets. This is
+informational only and does not affect resolution. Use this to note
+related discussions or similar issues.
+
+=head1 Custom Fields
+
+Custom fields allow your organization to track additional information
+specific to your needs. Each queue can have different custom fields
+configured. Common types include:
+
+=over
+
+=item Text - Free-form text entry
+
+=item Select - Choose from a predefined list
+
+=item Date - Calendar date values
+
+=item Multiple values - Select more than one value from a list
+
+=back
+
+Your RT administrator configures which custom fields are available
+for each queue.
+
+=head1 Attachments
+
+Attachments are files and email content associated with ticket
+correspondence. Each reply, comment, or incoming email can include
+attachments. The following fields are available for searching attachments
+in the Query Builder:
+
+=head2 Content
+
+The text content of ticket correspondence and attachments. Use this
+to search for specific words or phrases within the ticket history.
+
+=head2 ContentType
+
+The MIME type of an attachment, such as application/pdf, image/jpeg,
+or text/plain. Use this to find tickets with specific types of files.
+
+=head2 Filename
+
+The name of an attached file. Use this to find tickets with attachments
+matching a specific filename or pattern.
+
+=head1 History
+
+The History section displays the complete audit trail of the ticket,
+showing all changes since the ticket was created. This includes
+correspondence (replies sent to requestors), comments (internal notes),
+status changes, ownership changes, link changes, custom field updates,
+and any other modifications.
+
+Each history entry shows the type (such as "Comment" or "Correspond"),
+who made the change, when it occurred, and the details. The entries
+visible depend on the user's rights - for example, users without the
+ShowTicketComments right will not see comments.
+
+Attachments are shown with their associated history entry. Images may
+be displayed inline, while other file types like PDFs can be viewed
+in the browser or downloaded.
+
+History can be filtered and searched to find specific entries.
+
+=head1 Reminders
+
+Reminders are small sub-tickets attached to a main ticket. They help
+track follow-up tasks or deadlines associated with the ticket. Each
+reminder has its own subject, owner, and due date.
+
+=cut

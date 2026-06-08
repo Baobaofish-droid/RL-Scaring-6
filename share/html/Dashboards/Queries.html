@@ -1,0 +1,167 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Elements/Header, Title => $title &>
+<& /Elements/Tabs &>
+<& /Elements/ListActions, actions => \@results &>
+
+<&|/Widgets/TitleBox, title => loc('Setting Dashboard Content') &>
+  <p><&|/l&>Add content to your dashboard using the tools below. Dashboards use a grid system of rows and columns based on Bootstrap. Click the plus (+) to add rows. On each row, click the pencil to change the number of columns. Drag widgets from the left into columns to add them to the dashboard.</&></p>
+  <p><&|/l&>In a new row, columns will be equal size. To set different sizes, expand the Advanced section and use the Layout box to add or modify the Bootstrap classes. Set the column width with "col-#" where the # is the relative width. Add a class for each column and numbers that add up to 12 for each row. For example, a 3 column row might have "col-2, col-6, col-4". To ensure the columns are responsive on smaller screens include a bootstrap size class. The size classes indicate the smallest allowed width for a column before the columns are broken into separate rows. The size classes from smallest to largest are xs, sm, md, lg, xl, and xxl. The previous 3 column example using the md size would become "col-md-2, col-md-6, col-md-4".</&></p>
+</&>
+
+<& /Elements/EditPageLayout,
+    Class            => 'RT::Dashboard',
+    id               => $id,
+    Content          => $content,
+    AvailableWidgets => \@available_widgets,
+    PassArguments    => [qw/id/],
+&>
+
+<%INIT>
+my @results;
+
+my $Dashboard = RT::Dashboard->new($session{'CurrentUser'});
+my ($ok, $msg) = $Dashboard->LoadById($id);
+unless ($ok) {
+    RT::Logger->error("Unable to load dashboard with $id: $msg");
+    Abort(loc("Could not load dashboard [_1]", $id), Code => HTTP::Status::HTTP_NOT_FOUND);
+}
+
+Abort('Permission Denied') unless $Dashboard->CurrentUserCanSee;
+
+my $title;
+
+my $self_service_dashboard = $Dashboard->IsSelfService;
+if ($self_service_dashboard) {
+    $title = loc("Modify the self-service home page");
+} else {
+    $title = loc("Modify the content of dashboard [_1]", $Dashboard->Name);
+}
+my $content = ($Dashboard->Content || {})->{Elements} || [];
+
+if ( $ARGS{AddRow} || $ARGS{Update} ) {
+
+    if ( $ARGS{AddRow} ) {
+        push @$content, { Elements => [], map { $_ => $ARGS{$_} } grep { $ARGS{$_} } qw/Layout Title/ };
+
+        if ( $ARGS{SeparatedColumns} ) {
+            push @{ $content->[-1]{Elements} }, [] for 1 .. $ARGS{Columns};
+        }
+
+        my ( $ret, $msg ) = $Dashboard->SetContent( { Elements => $content } );
+        if ($self_service_dashboard) {
+            push @results, $ret ? loc('Self-Service home page updated') : $msg;
+        }
+        else {
+            push @results, $ret ? loc('Dashboard updated') : $msg;
+        }
+    }
+    else {
+
+        my $new_content = eval { JSON::from_json( $ARGS{Content} ) };
+        if ($@) {
+            push @results, loc("Couldn't decode JSON");
+        }
+        else {
+            if ( JSON::to_json( $new_content, { canonical => 1, pretty => 1 } ) ne
+                JSON::to_json( $content, { canonical => 1, pretty => 1 } ) )
+            {
+
+                my ( $ret, $msg ) = $Dashboard->SetContent( { Elements => $new_content } );
+                if ($self_service_dashboard) {
+                    push @results, $ret ? loc('Self-Service home page updated') : $msg;
+                }
+                else {
+                    push @results, $ret ? loc('Dashboard updated') : $msg;
+                }
+            }
+        }
+
+        my $path;
+        my $args;
+        if ($self_service_dashboard) {
+            $path = '/Admin/Global/SelfServiceHomePage.html';
+            $args = {};
+        }
+        else {
+            $path = '/Dashboards/Queries.html';
+            $args = { id => $id };
+        }
+        MaybeRedirectForResults(
+            Actions   => \@results,
+            Path      => $path,
+            Arguments => $args,
+        );
+    }
+}
+
+my @available_widgets = GetAvailableWidgets(
+    Class     => 'RT::Dashboard',
+    Page      => $self_service_dashboard ? 'SelfService' : '',
+    Dashboard => $Dashboard,
+);
+
+
+$m->callback(
+    CallbackName     => 'Default',
+    AvailableWidgets => \@available_widgets,
+    Content          => $content,
+    Dashboard        => $Dashboard,
+);
+
+my %available_widgets = map { join( '-', $_->{portlet_type}, $_->{component} || $_->{id} ) => $_ }
+    @available_widgets;
+for my $widget ( $Dashboard->Portlets ) {
+    if ( !$available_widgets{ join( '-', $widget->{portlet_type}, $widget->{component} || $widget->{id} )} ) {
+        push @results, loc('Unable to find [_1] [_2]', $widget->{portlet_type}, $widget->{description});
+    }
+}
+</%INIT>
+<%ARGS>
+$id => '' unless defined $id
+</%ARGS>

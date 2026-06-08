@@ -1,0 +1,489 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<div class="edit-saved-searches">
+<&| /Widgets/TitleBox, title => loc($Title)&>
+%# Hide all the save functionality if the user shouldn't see it.
+
+<h6><&|/l&>Load Search</&></h6>
+<&| /Elements/LabeledValue, Label => loc("Select search"), LabelFor => "SavedSearchLoad", ReadOnly => 0 &>
+    <& SelectSearchesForObjects, Name => 'SavedSearchLoad', Objects => \@LoadObjects, SearchType => $Type, Class => $Class &>
+  </&>
+  <div class="row mt-2 justify-content-end">
+    <div class="col-auto">
+      <input type="submit" class="btn btn-primary" value="<% loc('Load') %>" id="SavedSearchLoadSubmit" name="SavedSearchLoadSubmit" />
+    </div>
+  </div>
+
+<hr />
+% if ( $can_modify ) {
+%   if ( $Description && length $Description ) {
+  <h6><&|/l&>Modify Search</&></h6>
+%   } else {
+  <h6><&|/l&>Save Search</&></h6>
+% }
+  <&| /Elements/LabeledValue, Label => loc("Privacy"), LabelFor => "SavedSearchOwner", ReadOnly => 0 &>
+    <& SelectSearchObject, Name => 'SavedSearchOwner', Objects => \@CreateObjects, Object => ( $Object && $Object->id ) ? $Object : '' &>
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc("Name"), LabelFor => "SavedSearchName", ReadOnly => 0 &>
+    <input type="text" name="SavedSearchName" value="<% $Name || '' %>" class="form-control" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Description"), LabelFor => "SavedSearchDescription", ReadOnly => 0 &>
+    <input type="text" name="SavedSearchDescription" value="<% $Description || '' %>" class="form-control" />
+  </&>
+  <&| /Elements/LabeledValue, Label => '' &>
+    <div class="form-check">
+      <input type="checkbox" class="form-check-input checkbox" id="SavedSearchEnabled" name="SavedSearchEnabled" value="1" <% $Disabled ? '' : 'checked' %> />
+      <input type="hidden" class="hidden" name="SavedSearchSetEnabled" value="1" />
+      <label class="form-check-label" for="SavedSearchEnabled"><&|/l&>Enabled (Unchecking this box disables this search)</&></label>
+    </div>
+  </&>
+  <div class="row mt-2 justify-content-end">
+    <div class="col-auto">
+% if ($Id ne 'new') {
+% if ( $Dirty ) {
+<input type="submit" class="btn btn-primary me-1" name="SavedSearchRevert" value="<%loc('Revert')%>" />
+% }
+% if ( $AllowCopy ) {
+<input type="submit" class="btn btn-primary me-1" name="SavedSearchCopy"   value="<%loc('Save as New')%>" />
+% }
+% }
+
+% if ( $Object && $Object->Id && ( $Object->CurrentUserCanModify ) ) {
+<input type="submit" class="btn btn-primary me-1" id="SavedSearchSave" name="SavedSearchSave"   value="<%loc('Update')%>" />
+% } elsif ( !$Object ) {
+<input type="submit" class="btn btn-primary me-1" id="SavedSearchSave" name="SavedSearchSave"   value="<%loc('Save')%>" />
+%}
+    </div>
+  </div>
+% }
+
+% if ( $Object && $Object->Id ) {
+  <div class="row">
+    <div class="col"></div>
+    <div class="col-8"><hr /></div>
+    <div class="col"></div>
+  </div>
+  <div class="container text-center">
+  <div class="row mt-2">
+    <div class="col-4">
+      <span data-bs-toggle="modal" data-bs-target="#saved-search-options-modal">
+        <a href="#" id="saved-search-options-button" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" title="<% loc('Set options for this saved search') %>" hx-get="<% RT->Config->Get('WebPath') %>/Helpers/SavedSearchOptions?SavedSearchId=<% $Id %>" hx-target="#saved-search-options-modal" hx-trigger="click once" role="button"><% loc('Options') %></a>
+      </span>
+    </div>
+    <div class="col-4">
+% if ( RT->Config->Get( 'EnableURLShortener', $session{CurrentUser} ) ) {
+% my $saved_search = RT::SavedSearch->new( $session{CurrentUser} );
+% $saved_search->LoadById($Object->Id);
+      <span>
+        <a href="<% $m->request_path %>?sc=<% $saved_search->ShortenerObj->Code %>" class="permalink btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-title="<% loc('Permalink to this saved search') %>" data-code="<% $saved_search->ShortenerObj->Code %>" data-url="<% $m->request_path %>?sc=<% $saved_search->ShortenerObj->Code %><% ($saved_search->Type // '') eq 'Graph' ? "&id=$DECODED_ARGS->{id}" : '' %>" role="button" hx-boost="false"><% loc('Permalink') %></a>
+      </span>
+% }
+    </div>
+    <div class="col-4">
+% if ( $Object->DependedOnBy->Count ) {
+      <span data-bs-toggle="modal" data-bs-target="#saved-search-depended-on-by-list-modal" role="button">
+        <a href="javascript:void(0)" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" title="<% loc('View dashboards that use this saved search') %>"><% loc('Dashboards') %></a>
+      </span>
+% }
+    </div>
+    <div class="col-6"></div>
+  </div>
+  </div>
+% }  # End Object/Object->Id check
+
+</&>
+</div>
+
+% if ( $Object && $Object->Id && $Object->DependedOnBy->Count ) {
+<script type="text/javascript">
+document.querySelector('input[name=SavedSearchEnabled]').addEventListener('change', function() {
+    if ( !this.checked ) {
+        const modal = new bootstrap.Modal('#disable-saved-search-confirm-modal');
+        this.checked = true;
+        modal.show();
+    }
+});
+document.querySelector('#SavedSearchDisable').addEventListener('click', function() {
+    document.querySelector('input[name=SavedSearchEnabled]').checked = false;
+});
+</script>
+<div class="modal" id="disable-saved-search-confirm-modal">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><&|/l&>Really Disable?</&></h5>
+        <a href="javascript:void(0)" class="close" data-bs-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </a>
+      </div>
+      <div class="modal-body">
+        <& SELF:GetDependedOnByList, Object => $Object &>
+      </div>
+      <div class="modal-footer">
+        <div class="row mt-2 justify-content-end">
+          <div class="col-auto">
+            <input type="button" class="btn btn-primary" data-bs-dismiss="modal" id="SavedSearchDisable" value="<% loc('Disable') %>" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="saved-search-depended-on-by-list-modal">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><&|/l&>Depended On By List</&></h5>
+        <a href="javascript:void(0)" class="close" data-bs-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </a>
+      </div>
+      <div class="modal-body">
+        <& SELF:GetDependedOnByList, Object => $Object &>
+      </div>
+    </div>
+  </div>
+</div>
+% }
+
+<%INIT>
+
+return unless $session{'CurrentUser'}->HasRight(
+    Right  => 'LoadSavedSearch',
+    Object => $RT::System,
+);
+
+my $can_modify = RT::SavedSearch->new( $session{CurrentUser} )->CurrentUserCanCreateAny;
+
+use RT::SavedSearch;
+my @LoadObjects = RT::SavedSearch->new($session{CurrentUser})->ObjectsForLoading;
+my @CreateObjects = RT::SavedSearch->new($session{CurrentUser})->ObjectsForCreating;
+
+my $is_dirty = sub {
+    my %arg = (
+        Query       => {},
+        SavedSearch => {},
+        SearchFields => [qw(Query Format OrderBy Order RowsPerPage ExtraQueryParams), @ExtraQueryParams],
+        @_
+    );
+
+    my $obj  = $arg{'SavedSearch'}->{'Object'};
+    return 0 unless $obj && $obj->id;
+
+    my $content = $obj->Content;
+    foreach( @{ $arg{'SearchFields'} } ) {
+        return 1 if $content->{$_} ne $arg{'Query'}->{$_};
+    }
+
+    return 0;
+};
+
+# If we're modifying an old query, check if it's been changed
+my $Dirty = $is_dirty->(
+    Query       => $CurrentSearch,
+    SavedSearch => { Id => $Id, Object => $Object, Name => $Name, Description => $Description, Disabled => $Disabled },
+    SearchFields => \@SearchFields,
+);
+
+</%INIT>
+
+<%ARGS>
+$Id            => 'new'
+$Object        => undef
+$Class         => 'RT::Tickets'
+$Type          => $Class eq 'RT::Transactions' ? 'TicketTransaction' : $Class eq 'RT::Assets' ? 'Asset' : 'Ticket'
+$Name          => ''
+$Description   => ''
+$Disabled      => 0
+$CurrentSearch => {}
+@SearchFields   => ()
+$AllowCopy     => 1
+$Title         => loc('Saved searches')
+@ExtraQueryParams => ()
+</%ARGS>
+
+<%METHOD Init>
+<%ARGS>
+$Query       => {}
+$SavedSearch => {}
+@SearchFields => qw(Query Format OrderBy Order RowsPerPage)
+$Class        => 'RT::Tickets'
+$Type         => $Class eq 'RT::Transactions' ? 'TicketTransaction' : $Class eq 'RT::Assets' ? 'Asset' : 'Ticket'
+</%ARGS>
+<%INIT>
+
+$SavedSearch->{'Id'}
+    = ( $ARGS{Type} && $ARGS{Type} eq 'Chart' ? $ARGS{'SavedChartSearchId'} : $ARGS{'SavedSearchId'} ) || 'new';
+
+$SavedSearch->{'Name'}        = $ARGS{'SavedSearchName'} || '';
+$SavedSearch->{'Description'} = $ARGS{'SavedSearchDescription'} || '';
+$SavedSearch->{'PrincipalId'} = $ARGS{'SavedSearchOwner'}       || undef;
+$SavedSearch->{'Type'}        = $Type;
+$SavedSearch->{'Disabled'}    = $ARGS{'SavedSearchEnabled'} ? 0 : 1 if $ARGS{'SavedSearchSetEnabled'};
+
+my @results;
+
+if ( $ARGS{'SavedSearchRevert'} ) {
+    $ARGS{'SavedSearchLoad'} = $SavedSearch->{'Id'};
+}
+
+# See RT::Attribute for mappings of update, delete, display to actual
+# RT rights for the rights checks used here.
+
+if ( my $id = $ARGS{'SavedSearchLoad'} ) {
+    my $search = RT::SavedSearch->new( $session{'CurrentUser'} );
+    $search->Load( $id );
+
+    if ($search->Id) {
+        unless ($search->CurrentUserCanSee) {
+            push @results, loc("No permission to load search");
+            return @results;
+        }
+    }
+    else {
+      push @results, loc( 'Can not load saved search "[_1]"', $id );
+      return @results;
+    }
+
+    $SavedSearch->{'Id'}          = $ARGS{'SavedSearchLoad'};
+    $SavedSearch->{'Object'}      = $search;
+    $SavedSearch->{'Name'}        = $search->Name;
+    $SavedSearch->{'Description'} = $search->Description;
+    $SavedSearch->{'Disabled'}    = $search->Disabled;
+    my $content = $search->Content;
+    $Query->{$_} = $content->{$_} foreach @SearchFields;
+
+    if ( my $extra_params = $content->{'ExtraQueryParams'} ) {
+        $Query->{ExtraQueryParams} = $extra_params;
+        for my $param ( ref $extra_params eq 'ARRAY' ? @$extra_params : $extra_params ) {
+            $Query->{$param} = $content->{$param};
+        }
+    }
+    else {
+        delete $Query->{ExtraQueryParams};
+    }
+
+    # Remove all extra params not set in saved search.
+    if ( my $extra_params = $ARGS{ExtraQueryParams} ) {
+        for my $param ( ref $extra_params eq 'ARRAY' ? @$extra_params : $extra_params ) {
+            next if defined $content->{$param};
+            delete $Query->{$param};
+        }
+    }
+
+    if ( $ARGS{'SavedSearchRevert'} ) {
+        push @results, loc('Loaded original "[_1]" saved search', $SavedSearch->{'Name'} );
+    } else {
+        push @results, loc('Loaded saved search "[_1]"', $SavedSearch->{'Name'} );
+    }
+}
+elsif ( $ARGS{'SavedSearchCopy'} ) {
+    $SavedSearch->{'Object'} = RT::SavedSearch->new( $session{'CurrentUser'} );
+    $SavedSearch->{'Object'}->Load( $SavedSearch->{'Id'} );
+
+    for my $field ( qw/Name Description/ ) {
+        if ( $ARGS{'SavedSearch' . $field} && $ARGS{'SavedSearch' . $field} ne $SavedSearch->{'Object'}->$field ) {
+            $SavedSearch->{$field} = $ARGS{'SavedSearch' . $field};
+        } else {
+            $SavedSearch->{$field} = loc( "[_1] copy", $SavedSearch->{'Object'}->$field );
+        }
+    }
+
+    $SavedSearch->{'Id'}          = 'new';
+    $SavedSearch->{'Object'}      = undef;
+    $SavedSearch->{'Disabled'}    = $ARGS{'SavedSearchEnabled'} ? 0 : 1;
+}
+
+if ( $SavedSearch->{'Id'} && $SavedSearch->{'Id'} ne 'new'
+     && !$SavedSearch->{'Object'} )
+{
+    $SavedSearch->{'Object'} = RT::SavedSearch->new( $session{'CurrentUser'} );
+    $SavedSearch->{'Object'}->Load( $ARGS{'SavedSearchId'} );
+    $SavedSearch->{'Name'} ||= $SavedSearch->{'Object'}->Name;
+    $SavedSearch->{'Description'} ||= $SavedSearch->{'Object'}->Description;
+    $SavedSearch->{'Disabled'} //= $SavedSearch->{'Object'}->Disabled;
+}
+
+return @results;
+
+</%INIT>
+</%METHOD>
+
+<%METHOD Save>
+<%ARGS>
+$Query        => {}
+$SavedSearch  => {}
+@ExtraQueryParams => ()
+@SearchFields => ( qw(Query Format OrderBy Order RowsPerPage ObjectType ExtraQueryParams), @ExtraQueryParams )
+</%ARGS>
+<%INIT>
+
+return unless $ARGS{'SavedSearchSave'} || $ARGS{'SavedSearchCopy'};
+
+my @results;
+my $obj  = $SavedSearch->{'Object'};
+my $id   = $SavedSearch->{'Id'};
+my $name = $SavedSearch->{'Name'};
+my $desc = $SavedSearch->{'Description'};
+my $disabled = $SavedSearch->{'Disabled'};
+my $new_obj_id = $SavedSearch->{'PrincipalId'};
+
+my %params = map { $_ => $Query->{$_} } grep { defined $Query->{$_} } @SearchFields;
+
+if ( $obj && $obj->id ) {
+    # permission check
+    unless ( $obj->CurrentUserCanModify() ) {
+        push @results, loc("No permission to save system-wide searches");
+        return @results;
+    }
+
+    my ($ret, $msg) = $obj->SetContent( { %{ $obj->Content }, %params } );
+    push @results, $msg unless $ret;
+
+    if ( $obj->Name ne $name ) {
+        my ($ret, $msg) = $obj->SetName( $name );
+        push @results, $msg unless $ret;
+    }
+
+    if ( $obj->Description ne $desc ) {
+        my ($ret, $msg) = $obj->SetDescription( $desc );
+        push @results, $msg unless $ret;
+    }
+
+    if ( $obj->Disabled ne $disabled ) {
+        my ($ret, $msg) = $obj->SetDisabled( $disabled );
+        push @results, $msg unless $ret;
+    }
+
+    my $obj_id = $obj->PrincipalId;
+
+    if ( $new_obj_id ) {
+        my ($val, $msg);
+
+        # we need to check right before we change any of ObjectType and ObjectId, 
+        # or it will fail the 2nd change if we use SetObjectType and
+        # SetObjectId sequentially
+
+        if ( $obj->CurrentUserCanModify ) {
+            if ( $new_obj_id != $obj_id ) {
+                ( $val, $msg ) = $obj->SetPrincipalId($new_obj_id);
+                push @results, loc( 'Unable to set privacy id: [_1]', $msg ) unless ($val);
+            }
+        }
+        else {
+            # two loc are just for convenience so we don't need to
+            # write an extra i18n translation item
+            push @results, loc( 'Unable to set privacy object or id: [_1]', loc('Permission Denied') );
+        }
+    } else {
+        push @results, loc('Unable to determine object type or id');
+    }
+    push @results, loc('Updated saved search "[_1]"', $name) unless @results;
+}
+elsif ( $id eq 'new' and defined $name and length $name ) {
+    my $saved_search = RT::SavedSearch->new( $session{'CurrentUser'} );
+    my ($status, $msg) = $saved_search->Create(
+        PrincipalId  => $new_obj_id,
+        Name         => $name,
+        Description  => $desc,
+        Disabled     => $disabled,
+        Type         => $SavedSearch->{'Type'},
+        Content      => \%params,
+    );
+
+    if ( $status ) {
+        $SavedSearch->{'Object'} = $saved_search;
+        # Build new SearchId
+        $SavedSearch->{'Id'} = $saved_search->Id;
+    }
+    else {
+        push @results, loc("Can't find a saved search to work with").': '.loc($msg);
+    }
+}
+elsif ( $id eq 'new' ) {
+    push @results, loc("Can't save a search without a Name");
+}
+else {
+    push @results, loc("Can't save this search");
+}
+
+return @results;
+
+</%INIT>
+</%METHOD>
+
+<%METHOD GetDependedOnByList>
+
+% my $links = $Object->DependedOnBy;
+% $links->RowsPerPage(50);
+% my $total = $links->CountAll;
+  <p>
+    <&|/l, $total &>This search is used in the following [quant,_1,dashboard,dashboards]</&>:
+  </p>
+  <ul class="saved-search-depended-on-by-list list-group-compact">
+% while ( my $link = $links->Next ) {
+    <li class="list-group-item">
+%   if ( $link->BaseObj->isa('RT::Dashboard') ) {
+      <a href="<% $link->BaseURI->Resolver->HREF %>" target="_blank"><% $link->BaseURI->AsString %></a>
+%   } else {
+      <% $link->BaseObj->ObjectType %>: #<% $link->BaseObj->ObjectId %>
+%   }
+    </li>
+% }
+
+% if ( $total > 50 ) {
+    <li class="list-group-item">...</li>
+% }
+  </ul>
+
+<%ARGS>
+$Object
+</%ARGS>
+</%METHOD>

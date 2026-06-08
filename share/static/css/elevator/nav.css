@@ -1,0 +1,374 @@
+.navbar {
+    box-shadow: none;
+    background-color: var(--bs-body-bg);
+}
+
+.navbar .nav-link:focus-visible {
+    box-shadow: unset;
+}
+
+.navbar .menu-item:focus-visible {
+    outline: none;
+}
+
+.navbar li.has-children > a.dropdown-item::after {
+    display: inline-block;
+    content: "";
+    border-top: 0.3em solid transparent;
+    border-right: 0;
+    border-bottom: 0.3em solid transparent;
+    border-left: 0.3em solid;
+    position: absolute;
+    right: 0.3em;
+    margin-left: 0.3em;
+    top: 14px;
+}
+
+.navbar a.active {
+    font-weight: bold;
+}
+
+.navbar a {
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+    text-align: left;
+}
+
+.navbar li.nav-item a.nav-link {
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+#main-navigation {
+    position: absolute;
+    top: 5px;
+    left: 0;
+    z-index: 1000;
+}
+
+#main-navigation > nav {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+#page-navigation {
+    position: absolute;
+    top: 3.5em;
+    right: 1em;
+    min-height: 1.5rem; /* Tweak height for page menu that contains svg only */
+}
+
+#page-navigation > nav {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+#page-navigation a.nav-link {
+    padding: 0.2rem 0.5rem;
+}
+
+#page-navigation ul.page-menu.pinned a.nav-link {
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+}
+
+#page-navigation .page-menu {
+    float: right;
+    width: auto;
+}
+
+/* scrollable actions */
+#li-page-actions > ul {
+    overflow-y: auto;
+}
+
+#page-navigation {
+    z-index: 95;
+}
+
+/* be overly specific to defeat specificity */
+#app-nav > li#li-overflow,
+.page-menu > li#li-page-overflow {
+    display: none;
+}
+
+#app-nav > li#li-overflow.has-overflow,
+.page-menu > li#li-page-overflow.has-overflow {
+    display: list-item;
+}
+
+.search-results-page-menu-container nav {
+    --bs-navbar-padding-y: 0;
+}
+
+.search-results-page-menu-container .navbar li.nav-item a.nav-link {
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+}
+
+.search-results-page-menu-container .pinned .rt-inline-icon.border {
+    border: none !important;
+}
+
+.search-results-page-menu-container .pinned .rt-inline-icon.border svg {
+    vertical-align: middle;
+}
+
+/* Pin page menu to top left corner once you scroll past it */
+
+.page-menu.pinned {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: auto;
+    width: auto;
+    margin-top: 0;
+    border-radius: 0 0 0 var(--bs-border-radius);
+    box-shadow: 0 0 10px;
+    /* stupid vendor prefixes */
+    -moz-border-radius: 0 0 0 var(--bs-border-radius);
+    -webkit-border-radius: 0 0 0 var(--bs-border-radius);
+    -moz-box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+    -webkit-box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+}
+
+.search-results-page-menu-container .page-menu.pinned {
+    float: right;
+    width: auto;
+    top: 2em;
+    z-index: 94;
+}
+
+/* round off the corner of the first menu item so it matches the container */
+
+.page-menu.pinned > li:first-of-type:hover {
+    border-radius: 0 0 var(--bs-border-radius) var(--bs-border-radius);
+    -moz-border-radius: 0 0 var(--bs-border-radius) var(--bs-border-radius);
+    -webkit-border-radius: 0 0 var(--bs-border-radius) var(--bs-border-radius);
+}
+
+/* the last one, which is either More or the one before it if More is hidden */
+.page-menu.pinned > li:nth-last-of-type(1),
+.page-menu.pinned > li:nth-last-of-type(2):not(:has(+ li.has-overflow)) {
+    border-radius: var(--bs-border-radius) 0 0 var(--bs-border-radius);
+    -moz-border-radius: var(--bs-border-radius) 0 0 var(--bs-border-radius);
+    -webkit-border-radius: var(--bs-border-radius) 0 0 var(--bs-border-radius);
+}
+
+#topactions form {
+    display: inline;
+    float: left;
+    margin-left: 1em;
+    margin-top: 0.45rem;
+}
+
+#topactions {
+    position: absolute;
+    top: 0;
+    /* 238px is the logo's width,
+     * 2px is logo's "right" position,
+     * 1em is to add some space between logo and topactions */
+    right: calc(238px + 2px + 1em);
+    width: auto;
+    font-size: 0.9em;
+    z-index: 1000;
+}
+
+#topactions input[type="search"] {
+    /* turn off webkit input[type=search] styling */
+    -webkit-appearance: textfield;
+}
+
+/* topactions search box sizes and easing definitions */
+#topactions input {
+    width: 10em;
+}
+
+#topactions input[type="search"].expand {
+    -webkit-transition: width 0.25s ease-in-out;
+    -moz-transition: width 0.25s ease-in-out;
+    -ms-transition: width 0.25s ease-in-out;
+    transition: width 0.25s ease-in-out;
+}
+
+#topactions input[type="search"].expand:focus {
+    width: 16em;
+}
+
+@media (max-width: 900px) {
+    #topactions input {
+        width: 4.7em;
+    }
+
+    #topactions input[type="search"].expand:focus {
+        width: 10em;
+    }
+}
+
+#topactions input[type="search"]::-webkit-search-cancel-button {
+    /* hide webkit x button for searches */
+    -webkit-appearance: none;
+}
+
+#topactions input,
+#topactions select,
+#topactions button {
+    height: 2em;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+#topactions input,
+#topactions button {
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
+    vertical-align: middle;
+}
+
+@-moz-document url-prefix() {
+    #topactions select.select-queue {
+        padding-top: 0.25em;
+        padding-bottom: 0.25em;
+        height: auto;
+    }
+
+    /* Fix Queue name position in Queue select for Firefox */
+    #topactions .bootstrap-select .dropdown-toggle .filter-option {
+        margin-top: 5px;
+    }
+}
+
+.create-wide   { display: inline; }
+.create-medium { display: none; }
+.create-narrow { display: none; }
+
+@media (max-width: 900px) {
+    #topactions .create-wide   { display: none; }
+    #topactions .create-medium { display: inline; }
+    #topactions .create-narrow { display: none; }
+
+    #topactions form {
+        margin-left: 0.5em;
+    }
+}
+
+@media (max-width: 600px) {
+    #topactions .create-wide   { display: none; }
+    #topactions .create-medium { display: none; }
+    #topactions .create-narrow { display: inline; }
+
+    #topactions input[type="submit"], #topactions input.btn {
+        min-width: 2em;
+    }
+}
+
+
+[data-bs-theme=light] {
+    .navbar a.menu-item {
+        color: #000;
+    }
+
+    .navbar a.dropdown-item.active {
+        background-color: #fff;
+    }
+
+    a.dropdown-item.hovered,
+    a.dropdown-item.active:hover {
+        background-color: var(--bs-dropdown-link-hover-bg);
+    }
+
+    .page-menu.pinned {
+        background-color: white;
+        border-left-color: #aaa;
+        border-bottom-color: #aaa;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+    }
+
+    .page-menu.pinned li:hover ul {
+        border-left-color: #aaa;
+        border-right-color: #aaa;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+    }
+
+    #app-nav > li > a:hover,
+    .page-menu > li > a:not(:has(.rt-inline-icon)):hover {
+        background: #cfdeff;
+    }
+
+    /* Keyboard navigation focus styling - only active when keyboard nav is detected */
+    body.keyboard-nav-active #app-nav > li > a.menu-item:focus,
+    body.keyboard-nav-active .page-menu > li > a.menu-item:focus {
+        background: #cfdeff;
+    }
+
+    #topactions form input.btn {
+        border-color: #4868b3;
+    }
+}
+
+[data-bs-theme=dark] {
+    .navbar li a {
+        color: #FFF;
+    }
+
+    .dropdown-menu {
+        background: #323D42;
+        border-color: #717171;
+    }
+
+    .dropdown-item *,
+    .dropdown-item *,
+    .dropdown-item,
+    a.dropdown-item {
+        background: #323D42;
+    }
+
+    .dropdown-divider {
+        border-color: #3A3C43;
+    }
+
+    .dropdown-item.hovered,
+    .dropdown-item.active:hover,
+    .dropdown-item:focus *,
+    .dropdown-item:hover *,
+    .dropdown-item:focus,
+    .dropdown-item:hover {
+        background: #3A474D;
+    }
+
+    .page-menu.pinned {
+        background-color: #323D42;
+        box-shadow: none;
+    }
+
+    .page-menu.pinned ul {
+        border-color: #515151;
+    }
+
+    #app-nav > li > a.menu-item:hover,
+    .page-menu > li > a:not(:has(svg.fa-cog)):hover {
+        background: #3a474d;
+    }
+
+    /* Keyboard navigation focus styling for dark mode */
+    body.keyboard-nav-active #app-nav > li > a.menu-item:focus,
+    body.keyboard-nav-active .page-menu > li > a.menu-item:focus {
+        background: #3a474d;
+    }
+
+    .nav-tabs {
+        border-bottom: 1px solid #515151;
+    }
+
+    .nav-tabs .nav-link:hover,
+    .nav-tabs .nav-link.active {
+        border-color: #515151;
+    }
+
+    .nav-pills .nav-link.active {
+        background-color: #323D42 !important;
+    }
+}

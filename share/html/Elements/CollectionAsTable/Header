@@ -1,0 +1,336 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%ARGS>
+$Class        => 'RT::Tickets'
+
+@Format       => undef
+$FormatString => undef
+@OrderBy      => ()
+@Order        => ()
+$Query        => undef
+$Rows         => undef
+$Page         => undef
+$GenericQueryArgs => undef
+$maxitems     => undef
+
+$AllowSorting  => undef
+$AllowFiltering => undef
+$BaseURL       => undef
+@PassArguments => qw(Query Format Rows Page Order OrderBy)
+
+# htmx attributes for dynamic sorting
+$UseHtmx    => 0
+$HtmxTarget => undef
+$HtmxSwap   => 'innerHTML'
+</%ARGS>
+
+<%PERL>
+# If we have multiple lines in the header, we only want a bottom border on
+# the last row. Add a class to all but the last so we can customize the styles
+# on all but the bottom tr.
+
+my $hide_tr_borders = 0;
+my $newline_count = grep {$_->{'title'} && $_->{'title'} eq 'NEWLINE'} @Format;
+$hide_tr_borders = 1 if $newline_count > 0;
+</%PERL>
+
+<thead>
+  <tr class="collection-as-table <% $hide_tr_borders ? 'hide-tr-borders' : '' %> ">
+<%PERL>
+
+my $generic_query_args = $GenericQueryArgs || {map { $_ => $ARGS{$_} } @PassArguments};
+# backward compatibility workaround
+$generic_query_args->{'Format'} = $FormatString if grep $_ eq 'Format', @PassArguments;
+
+my $column_map_class;
+if ( $Class =~ /::/ ) {
+    $column_map_class = $Class->ColumnMapClassName;
+}
+else {
+    # For back compatibility
+    $column_map_class = $Class;
+}
+
+my $item = 0;
+
+
+# "Requestor" has alias "Requestors", this is to handle the case where
+# OrderBy is "Requestor.Name" and result Format is "Requestors"
+my %field_alias;
+if ( $Class->can('RecordClass') && $Class->RecordClass->DOES("RT::Record::Role::Roles") ) {
+    for my $role ( $Class->RecordClass->Roles( UserDefined => 0 ) ) {
+        my $attrs = $Class->RecordClass->Role($role);
+        $field_alias{$role} = $role . 's' unless $attrs->{Single};
+    }
+}
+
+my %order_by;
+for my $i ( 0 .. $#OrderBy ) {
+    my $field = $OrderBy[$i];
+    $order_by{$field}{index} = $i;
+    $order_by{$field}{order} = $Order[$i] || 'ASC';
+    $order_by{$field}{class} = $order_by{ $OrderBy[$i] }{order} =~ /ASC/i ? 'sort-up' : 'sort-down';
+
+    if ( $field =~ m!^(\w+)\.! && $field_alias{$1} ) {
+        my $alias = $field;
+        $alias =~ s!^(\w+)\.!$field_alias{$1}.!;
+        $order_by{$alias} = $order_by{$field};
+    }
+}
+
+my $tr_count = 1;
+foreach my $col ( @Format ) {
+    $hide_tr_borders = 0;
+    $hide_tr_borders = 1 if $tr_count < $newline_count;
+    $tr_count++;
+
+    my $attr = $col->{'attribute'} || $col->{'last_attribute'};
+
+    my $title = $col->{'title'} || '';
+    if ( $title eq 'NEWLINE' ) {
+        while ( $item < $maxitems ) {
+            $m->out(qq{<th class="collection-as-table">&nbsp;</th>\n});
+            $item++;
+        }
+
+        $item = 0;
+        $m->out(qq{</tr>\n<tr class="collection-as-table} . ($hide_tr_borders ? 'hide-tr-borders' : '') . qq{">});
+        next;
+    } elsif ( $title eq 'NBSP' ) {
+        $item++;
+        $m->out(qq{<th class="collection-as-table">&nbsp;</th>\n});
+        next;
+    }
+
+    my $span = $col->{'span'};
+    $item += ($span || 1);
+
+    my $class = 'collection-as-table';
+    $class .= ' allow-sorting' if $AllowSorting;
+    $class .= ' allow-filtering' if $AllowFiltering;
+
+    my $align = $col->{'align'} || do {
+        my $tmp_columnmap = $m->comp( '/Elements/ColumnMap',
+            Class => $column_map_class,
+            Name => $attr,
+            Attr => 'align',
+        );
+        ProcessColumnMapValue( $tmp_columnmap, Arguments => [ $attr ] );
+    };
+
+    # Convert align value to Bootstrap 5 text alignment class
+    if ($align) {
+        if ($align eq 'left') {
+            $class .= ' text-start';
+        } elsif ($align eq 'center') {
+            $class .= ' text-center';
+        } elsif ($align eq 'right') {
+            $class .= ' text-end';
+        }
+    }
+
+    $m->out(qq{<th class="$class"});
+    $m->out(' colspan="' . $m->interp->apply_escapes($span  => 'h') . '"')
+        if $span;
+    $m->out('>');
+
+    my $loc_title;
+    # if title is not defined then use defined attribute or last
+    # one we saw in the format
+    unless ( defined $col->{'title'} ) {
+        my $tmp = $m->comp( '/Elements/ColumnMap',
+            Class => $column_map_class,
+            Name  => $attr,
+            Attr  => 'title',
+        );
+        $title = ProcessColumnMapValue( $tmp, Arguments => [ $attr ] );
+
+        # in case title is not defined in ColumnMap 
+        # the following regex changes $attr like from "ReferredToBy" to "Referred To By"
+        $title = join ' ', split /(?<=[a-z])(?=[A-Z])/, $attr unless defined $title;
+        $loc_title = $attr =~ /^(?:CustomField|CF)\./ ? $title : loc($title);
+    } else {
+        $loc_title = loc($m->comp('/Elements/ScrubHTML', Content => $title));
+    }
+
+    my $attribute;
+    my $sortable;
+    if ( $col->{'attribute'} ) {
+        $attribute = $m->comp(
+            "/Elements/ColumnMap",
+            Class => $column_map_class,
+            Name  => $col->{'attribute'},
+            Attr  => 'attribute'
+        );
+        $sortable = $m->comp(
+            "/Elements/ColumnMap",
+            Class => $column_map_class,
+            Name  => $col->{'attribute'},
+            Attr  => 'sortable'
+        ) // $attribute;
+    }
+
+    if ( $AllowSorting && $sortable ) {
+        my $attr = ProcessColumnMapValue( $attribute, Arguments => [ $col->{'attribute'} ], Escape => 0 );
+
+
+        my @new_order_by = @OrderBy;
+        my @new_order = @Order;
+
+        # ASC -> DESC -> UNSET -> ASC, etc.
+        if ( $order_by{$attr} ) {
+             splice @new_order_by, $order_by{$attr}{index}, 1;
+             splice @new_order,   $order_by{$attr}{index}, 1;
+
+             if ( $order_by{$attr}{order} eq 'ASC' ) {
+                 unshift @new_order_by, $attr;
+                 unshift @new_order,   'DESC';
+             }
+        }
+        else {
+            unshift @new_order_by, $attr;
+            unshift @new_order, 'ASC';
+        }
+
+        my $query_string = $m->interp->apply_escapes(
+            $m->comp( '/Elements/QueryString',
+                ShortenSearchQuery(%$generic_query_args),
+                OrderBy => join( '|', @new_order_by ), Order => join( '|', @new_order ),
+            ), 'h');
+
+        if ($UseHtmx && $HtmxTarget) {
+            # Generate htmx-enabled sorting link
+            # BaseURL does not include '?' for htmx requests, so we add it here
+            $m->out(
+                '<span class="title"><a href="#" hx-get="' . $m->interp->apply_escapes($BaseURL, 'h') . '?' . $query_string . '" '
+                . 'hx-target="' . $m->interp->apply_escapes($HtmxTarget, 'h')
+                . '" hx-swap="' . $m->interp->apply_escapes($HtmxSwap, 'h') . '">'
+                . $loc_title
+            );
+        } else {
+            # Generate regular sorting link (BaseURL includes '?')
+            $m->out(
+                '<span class="title"><a href="' . $m->interp->apply_escapes($BaseURL, 'h') . $query_string . '">' . $loc_title
+            );
+        }
+
+        if ( $order_by{$attr} ) {
+            $m->out( qq!&nbsp;! . GetSVGImage( Name => $order_by{$attr}{class} ) );
+        }
+        $m->out('</a></span>');
+    }
+    else {
+        $m->out( qq{<span class="title">$loc_title</span>} );
+    }
+
+    if ( $AllowFiltering ) {
+        my $attr = ProcessColumnMapValue( $attribute, Arguments => [ $col->{'attribute'} ], Escape => 1 );
+        my %supported;
+        my $filter_comp;
+        my $filter_view;
+        if ( $Class eq 'RT::Tickets' ) {
+            %supported = map { $_ => 1 }
+                qw/id Subject Description Status Queue Owner Type Creator LastUpdatedBy SLA InitialPriority FinalPriority Priority TimeLeft TimeWorked TimeEstimated Created LastUpdated Told Starts Started Due Resolved Requestors Requestor Cc AdminCc/;
+            $filter_comp = '/Search/Elements/FilterTickets';
+            $filter_view = '/Views/Component/FilterTickets';
+        }
+        elsif ( $Class eq 'RT::Assets' ) {
+            %supported = map { $_ => 1 }
+                qw/id Name Description Status Catalog Created LastUpdated Creator LastUpdatedBy Owner HeldBy Contact Contacts/;
+            $filter_comp = '/Search/Elements/FilterAssets';
+            $filter_view = '/Views/Component/FilterAssets';
+        }
+
+        my $field;
+        if ( ( $attr || '' ) =~ /^(\w+)/ && $supported{$1} ) {
+            $field = $1;
+        }
+        elsif ( ( $attr || '' ) =~ /^(CustomRole\.\{.+?\})/ ) {
+            $field = $1;
+        }
+        elsif ( ( $attr || '' ) =~ /^(?:CF|CustomField(?:View)?)\.(?:(\w+)|\{(.+?)\})/ ) {
+            my $name = $1 || $2;
+            $field = "CustomField.{$name}";
+        }
+
+        if ( $field && $filter_comp ) {
+            my $tooltip = loc( 'Filter on [_1]', loc($field) );
+            my $icon = exists $filter_data{filter}{$field} ? 'funnel-fill' : 'funnel';
+            $icon = GetSVGImage(Name => $icon, Title => $tooltip);
+
+            my $filter_query = $m->comp('/Elements/QueryString', ShortenSearchQuery(Attribute => $field, Query => $ARGS{Query}, BaseQuery => $ARGS{BaseQuery}) );
+
+            my $trigger = 'manual';
+            if ( exists $filter_data{filter}{$field} ) {
+                $trigger .= ', load';
+            }
+
+            $m->out(
+                qq{&nbsp;<a href="#" class="btn btn-primary search-filter" hx-get="} . RT->Config->Get('WebPath')
+                . qq{$filter_view?$filter_query" hx-target="[id='search-filter-attribute-} . lc($field) . qq{']" }
+                . qq{hx-trigger="$trigger">$icon</a>}
+            );
+            $m->out( $m->scomp( $filter_comp, Attribute => $field, FilterData => \%filter_data, %ARGS ) );
+        }
+    }
+    $m->out('</th>');
+}
+</%PERL>
+  </tr>
+</thead>
+
+<%INIT>
+
+# %filter_data is needed to show a full filter icon if a filter has been applied
+# for an attribute.
+my %filter_data;
+
+if ( $AllowFiltering && $ARGS{Query} && $ARGS{BaseQuery} ) {
+    %filter_data = %{ ProcessQueryForFilters( Class => $Class, Query => $ARGS{Query}, BaseQuery => $ARGS{BaseQuery} ) };
+}
+</%INIT>

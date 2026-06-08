@@ -1,0 +1,479 @@
+=head1 UPGRADING FROM RT 5.0.0 and greater
+
+The 6.0 release is a major upgrade and as such there are more changes
+than in a minor bugfix release (e.g., 5.0.1 to 5.0.2) and some of these
+changes are backward-incompatible. The following lists some of the notable
+changes, especially those that might require you to change a configuration
+option or other setting due to a change in RT. Read this section carefully
+before you upgrade and look for changes to features you currently use.
+
+See F<devel/docs/UPGRADING-6.0> for internals changes relevant to
+extension writers, including deprecated code.
+
+=head2 Upgrading Recommendations
+
+RT now defaults to a database name of rt6 and an installation root of
+/opt/rt6.
+
+If you are upgrading, you will likely want to specify that your database is
+still named rt5 or even rt4. Alternatively, you could import a backup of your
+database as rt6 to conform to the new default, although this isn't required.
+
+Upgrading to RT 6 over an existing RT 5 installation (/opt/rt5) is not
+recommended and will almost certainly cause issues. Instead, do a fresh
+install into /opt/rt6 (or your custom location) for the code portion of the
+upgrade. Then import your existing database and run the database upgrade
+steps using make upgrade-database.
+
+We recommend this approach because of the large number of changes to the code
+base for this major release. We moved some things to new locations and old
+files are not removed as part of the upgrade process. These old files will
+still be detected by RT in some cases and will cause issues.
+
+Installing a fresh code base will also allow you to evaluate your local
+modifications and configuration changes as you migrate to 6.0. If you have
+changes made directly to the RT code, it's a good time to look at the hooks
+RT provides for custom code in extensions or in the local directory. See
+F<docs/writing_extensions.pod> for more information.
+
+=head2 Notable Application Changes
+
+=over
+
+=item *
+
+RT now uses a library called L<htmx|https://htmx.org/>, which makes AJAX
+much easier and allows us to completely change the way pages, components,
+and widgets load and update in RT. You'll see the difference on just about
+every page in RT starting immediately with the home page. This update gives RT
+a much more interactive feel and speeds up nearly every interaction.
+
+=item *
+
+RT's sessions have been refactored to be non-blocking to accommodate the change
+to C<htmx> noted above. Because different parts of the page can now be loaded
+in parallel, sessions needed to be updated to not expect a single page load.
+
+This change should be transparent, but may impact custom code.
+
+=item *
+
+Saved searches can now be configured to automatically refresh, independent of
+the page and other portlets. If you currently use the Refresh feature to reload
+your entire home page, you can now update your saved search options to
+refresh each search individually instead. And each search can have a different
+refresh interval. The user experience is much nicer, and it puts less load on
+your RT server.
+
+Each saved search in a dashboard also has a Reload icon you can use to manually
+reload just that search. If you want to reload only when you are reviewing
+a search for updates, this new button may work well.
+
+The Refresh portlet still displays if you have it on your homepage dashboard,
+but it no longer refreshes the page. It now displays a message explaining
+the updates to saved searches and how to set the refresh interval there.
+
+The Refresh option on the search results page has also been removed for
+the same reason. If you have a search that you want to refresh regularly,
+create a dashboard with that search and set the refresh on the search.
+
+The corresponding HomePageRefreshInterval and SearchResultsRefreshInterval
+configuration options have also been removed.
+
+=item *
+
+The Quick Create portlet has been updated to use htmx, so it creates tickets
+without a full page reload. It also now supports adding custom fields with
+configuration, allowing you to add required custom fields. Add custom
+fields using the C<%QuickCreateCustomFields> option.
+
+=item *
+
+Ticket create, display, and update pages, and asset create and display pages
+are now completely configurable using a new feature called Page Layouts.
+You can create and save new page layouts, arranging widgets on the page
+however you want. You can then apply these configurations to your Queues
+and Catalogs on the respective administration pages.
+
+=item *
+
+Because of the new Page Layouts feature, the UseSideBySideLayout configuration
+is no longer needed. This option was previously enabled by default and a
+two column page layout is available. A page layout called "One Column" is also
+available if you had disabled UseSideBySideLayout and prefer a single-column
+layout.
+
+This option was also available as a user-level preference and we don't (yet)
+have user-level page layouts. If you prefer a single column layout, for now
+you can appeal to your RT admin to set up your queues with "One Column" or
+something similar.
+
+=item *
+
+Saved searches, dashboards, and dashboard subscriptions have been refactored
+to use their own database tables (instead of "Attributes"). Previously removing
+them required you to delete them completely, now you can disable them instead.
+
+This also allowed us to create some new pages for seeing and managing
+Dashboards and Saved Searches. As a SuperUser, you will now see
+Admin > Global > Dashboards/Saved Searches. On the user admin
+page, you can see Dashboards and Saved Searches for each user,
+and there is a corresponding page for each group as well.
+
+Related rights have also been tweaked:
+
+=over
+
+=item *
+
+SeeSavedSearch/SeeDashboard and AdminSavedSearch/AdminDashboard are to see
+and manage *global* saved searches and dashboards.
+
+=item *
+
+SeeGroupSavedSearch/SeeGroupDashboard and
+AdminGroupSavedSearch/AdminGroupDashboard are to see and manage *group*
+saved searches and dashboards.
+
+=item *
+
+SeeOwnSavedSearch/SeeOwnDashboard and AdminOwnSavedSearch/AdminOwnDashboard
+are to see and manage user's *own* saved searches and dashboards.
+
+=back
+
+Since default saved searches (C<My Tickets>, C<Unowned Tickets>, and
+C<Bookmarked tickets>) now are plain system saved searches, we grant all
+privileged users C<SeeSavedSearch> so they can see these searches as before.
+
+When testing your upgrade, we encourage all users to check access to dashboards
+and saved searches to confirm rights are still set correctly. Note that these
+rights apply to seeing and accessing just the configured dashboards and
+saved searches themselves. Rights to see the contents of the searches,
+like tickets and assets, are defined separately and should not be
+effected by these changes.
+
+=item *
+
+Simple search (the default search box on the top of the page) now searches
+subjects and descriptions. It also searches ticket content, and custom field
+values when you enable full-text search indexes.
+
+Full-text search on ticket content has been available in RT since
+RT 4.0. However, the default simple search previously
+excluded the ticket subject because it interfered with the full-text
+index. This is now updated, so default searches now include subject
+and the full-text index is still used.
+
+You can now also search in custom field content by default if you
+enable full-text search for custom fields. Enabling it is similar to
+full-text search for ticket content. If you already have
+full-text indexes enabled for ticket content, you can run C<sbin/rt-setup-fulltext-index>
+with the C<--cf-only> option to add custom field indexing.
+
+    sbin/rt-setup-fulltext-index --cf-only
+
+Then update your C<%FullTextSearch> configuration according to the output
+of above command. See F<docs/full_text_indexing.pod> for details.
+
+As part of these updates, RT 6 removes support for Sphinx indexing on
+MySQL. Sphinx support was added before MySQL had native full-text search.
+All of the databases supported by RT now have native full-text search
+and that is the recommended configuration for full-text indexes.
+
+=item *
+
+While it has been possible to use JSChart to generate chart images in the RT UI,
+because these images are generated client-side it hasn't been possible to include
+them in dashboard emails.
+
+It is now possible to use the optional Perl module L<WWW::Mechanize::Chrome> and
+a compatible server-side web browser to create images of the JSChart graphs for
+inclusion in emails.
+
+This is accomplished by setting C<$EmailDashboardIncludeCharts> to '1' and
+maybe also setting C<$ChromePath> to the path of the executable for your
+chosen Chrome-based browser.
+
+This feature has been tested on Linux servers using packaged versions of
+Chrome, Chromium, Microsoft Edge, and Opera. Other Chrome-based browsers
+that can run via command-line on a Linux server may also work.
+
+=item *
+
+Inline edit mode is again the default format for the Owner field in
+ticket search results.
+
+In RT 5, we changed the default to a view-only version of Owner to
+improve performance when loading search results. We updated the Owner
+input to load only when you use it, removing the penalty when loading
+ticket results, so inline edit mode is the default again.
+
+=item *
+
+The default value for the C<$ShowHistory> configuration option is changed from
+C<delay> to C<scroll>. This controls how history on tickets is loaded. The
+C<scroll> option loads blocks as you scroll down the page, which
+allows the initial ticket to load more quickly.
+
+This update works well with the change noted below, which now shows
+newest transactions first. In most cases, this allows users to see the
+latest ticket updates without having to scroll.
+
+=item *
+
+The default order for history on tickets is now newest first. This makes it
+much easier to immediately see new changes on a ticket without having to
+scroll through the entire past history.
+
+If you prefer seeing the oldest transactions first, which was the previous
+default, you can set C<$OldestTransactionsFirst> to 1 in your configuration.
+
+This setting is also available as a user-level preference. This allows you
+to set the global setting to align with the majority of your users and have
+a subset of users set a different value personally if it helps them.
+
+=item *
+
+The configuration option L<RT_Config/$SendmailBounceArguments> used to rely
+on L<RT_Config/$SendmailArguments> as a base and add to that configuration.
+
+These two configuration options are now completely separate. RT will not
+use any arguments defined in L<RT_Config/$SendmailArguments> when sending
+bounces.
+
+If you previously customized L<RT_Config/$SendmailArguments>  or
+L<RT_Config/$SendmailBounceArguments>, when upgrading you need to review
+and copy any needed arguments from L<RT_Config/$SendmailArguments> to
+L<RT_Config/$SendmailBounceArguments>.
+
+=item *
+
+The following dependent libraries are updated to the new versions listed
+below in RT 6. Note that a common change in all javascript libraries and
+RT itself is dropping support for Internet Explorer. This has allowed
+developers to use newer javascript features and remove old special code
+that was just to handle IE-specific behavior.
+
+=over
+
+=item *
+
+Bootstrap 5.3
+
+=item *
+
+CKEditor 5
+
+=item *
+
+Chart.js 4.4.7
+
+=back
+
+=item *
+
+Dropzone 7.2.0
+
+The new version supports attachment uploads in secure context only, which
+is over https or running a developer checkout on localhost. If you need to
+run without SSL, you can disable Dropzone in the RT configuration.
+
+=back
+
+=head2 Database Changes
+
+As always, all database changes are automated and will be run as part of
+the upgrade process when you run C<make upgrade-database>. We offer some
+additional context here in case you need to troubleshoot, or if you
+have local modifications, or if you're just curious.
+
+=over
+
+=item *
+
+Dashboards, SavedSearches, and DashboardSubscriptions are new tables and
+existing content for those objects will be migrated from Attributes, which
+is where the data used to live. This probably won't be a visible change, but
+it makes a bunch of RT code much nicer to work with.
+
+=item *
+
+Scrips and other associated tables are updated to support scrips features
+that are now available for assets and articles.
+
+=back
+
+=head2 Extensions Integrated into RT 6
+
+The following extensions are now part of RT 6. If you previously used any as
+an extension, you no longer need the extension after upgrading and can
+remove the C<Plugin> line from your RT configuration.
+
+Changes you may need to apply if you previously used the extension
+are described below.
+
+=over
+
+=item RT::Extension::ArticleTemplates
+
+You need to set L<$EnableArticleTemplates|RT_Config/$EnableArticleTemplates>
+to 1 to enable it.
+
+=item RT::Extension::TimeTracking
+
+Transaction custom fields "Worked Date" and "Actor" are automatically disabled
+after upgrade. They are not needed any more, so you can use sbin/rt-shredder
+to totally remove them. E.g. assuming ids of "Worked Date" and "Actor" are
+1234 and 5678, respectively, you can shred them using the following command:
+
+    sbin/rt-shredder --plugin 'Objects=CustomField,1234;CustomField,5678'
+
+=item RTx::Calendar
+
+Saved searches named "calendar" will need to be updated. Edit the saved
+searches and change the Display As option to Calendar, then Update the saved
+search.
+
+Dashboards with a calendar widget will also need to be updated. Edit the
+dashboards and replace the calendar widget from RTx::Calendar with the
+saved search that provides the calendar.
+
+If you do not have a saved search named calendar you need to create a saved
+search that matches the default RTx::Calendar search:
+
+    Query
+        ( Status = 'new' OR Status = 'open' OR Status = 'stalled')
+        AND ( Owner = '" . $session{CurrentUser}->Id ."' OR Owner = 'Nobody'  )
+        AND ( Type = 'reminder' OR 'Type' = 'ticket' )
+
+    Format
+        __Starts__,
+        __Due__
+
+The calendar has been simplified to eliminate any configuration other than the
+search format for the saved search. See F<docs/query_builder.pod> for details on
+configuring calendar saved searches using the search format.
+
+=back
+
+=head1 UPGRADING FROM 6.0.0
+
+=over
+
+=item Toolbar configuration in C<%MessageBoxRichTextInitArguments> updated
+
+The CKEditor toolbar configuration defined in C<%MessageBoxRichTextInitArguments>
+used the basic format in RT 6.0.0. RT 6.0.1 updates this to the extended format,
+adding an C<items> entry to C<toolbar>. The C<toolbar> option can accept other
+options, like C<shouldNotGroupWhenFull>, and this change makes it easier for admins
+and extension authors to add options without re-writing the entire toolbar
+configuration.
+
+If you have customized C<%MessageBoxRichTextInitArguments>, we recommend updating
+your custom configuration to also include the C<items> entry to ensure
+compatibility with future extensions.
+
+=item LastUpdated does not update for same value
+
+When attempting to set fields to their current value,
+RT compares the values, sees that no update is needed, and makes no change
+and no transaction is recorded. However, in some cases, LastUpdated would
+still be updated. This was incorrect since the value was not updated again,
+and could be confusing since it could appear that a ticket or asset had been
+updated, but no transaction was shown in the history.
+
+This has been fixed and LastUpdated is no longer changed in these cases.
+This was mostly for direct perl API calls, so the change would be most likely
+to be noticed for command-line scripts or other automation.
+
+=back
+
+=head1 UPGRADING FROM 6.0.1
+
+=over
+
+=item REST2 interface can be disabled
+
+Since it's not possible to use the REST2 API in a command-line program, RT
+now loads REST2 libraries only for web server processes. In our testing this
+saves about 16 MB of memory for CLI processes.
+
+We have also added an option to disable REST2 for web server processes. This
+saves memory for systems that do not use REST2. The default is still enabled.
+
+    Set($EnableREST2, 0);
+
+=item Custom Role Visibility moved to Page Layouts
+
+Custom roles previously had a configuration page that allowed you to show or hide
+that custom role on various pages in RT. With page layouts in RT 6, it's no
+longer certain what components will be on any given page. Custom role
+visibility is therefore moved to the individual widgets where the custom role
+is displayed. Look for the pencil icon on widgets like Message and People and
+click to set show/hide settings for each custom role.
+
+This new location allows you to set visibility in each page layout, so different
+queues can have different settings, which was not possible previously.
+
+If you have existing custom role visibility settings, on upgrade from RT 5 you
+will need to apply those settings to the desired locations in page layouts.
+
+=back
+
+=head1 UPGRADING FROM 6.0.2
+
+=over
+
+=item Dashboard saved searches now use their own Rows settings
+
+In previous versions, when displaying saved searches on dashboards, the
+homepage used C<$DefaultSummaryRows> configuration option to set
+the number of rows displayed in each search portlet. All other dashboards
+defaulted to 50 rows. Users could also set a personal preference for this
+value on the Logged in as > Settings > Options > Search Options page.
+
+RT now uses the Rows setting configured in each saved search when displaying
+it on a dashboard. This allows different searches to show different numbers
+of results.
+
+The default for C<$DefaultSummaryRows> is now C<undef>, which enables this
+new behavior on the homepage. If this is disruptive for your RT and you want
+to restore the old default for homepages, set C<$DefaultSummaryRows> to 10,
+which was the old value. Or, users can update the rows setting in their saved
+searches, possibly picking a different value for different searches.
+
+Users can now set individual preferences for rows and columns in each saved
+search in a dashboard by clicking the gear icon. If a user has personal
+settings, the gear will be filled in, making it easy to see if there are
+overrides.
+
+=item Saved searches on dashboards now support pagination and column sorting
+
+Saved searches displayed on dashboards now show pagination controls at the
+bottom when results span multiple pages. Users can navigate through pages
+without leaving the dashboard.
+
+Column headers in dashboard search results are now clickable, allowing users
+to re-sort results by that column. Clicking a column header cycles through
+ascending, descending, and default sort order. These temporary sort changes
+are preserved when navigating between pages or when the search auto-refreshes.
+
+=item Status colors in lifecycles
+
+RT can now display ticket and asset statuses as colored badges. Colors are
+configured per-status in each lifecycle. To set status colors via the
+web UI, go to Admin > Lifecycles, select a lifecycle, and in the graphical
+editor, click on a status name. A modal will pop up allowing you to enable
+and select a status color.
+
+If you are managing your lifecycles via a configuration file, you can add
+a new C<colors> key and provide a hex color value for each status.
+
+On new installs, RT's built-in lifecycles (default, approvals, and assets)
+ship with default colors. For existing systems, you can select new colors
+after upgrading.
+
+=back
+
+=cut

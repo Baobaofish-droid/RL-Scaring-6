@@ -1,0 +1,251 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+%# index.html gets two doctypes unless we can skip it here
+% unless ($SkipDoctype) {
+<!DOCTYPE html>
+% }
+
+<html lang="<% $lang %>" data-bs-theme="<% RT->Config->Get( 'WebDefaultThemeMode', $session{'CurrentUser'} ) %>">
+  <head>
+    <title><%$Title%></title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <!-- The X-UA-Compatible <meta> tag above must be very early in <head> -->
+% if ( !RT::Interface::Web::RequestENV('HTTP_HX_REQUEST') ) {
+
+<& JavascriptConfig, Language => $lang &>
+
+% for my $cssfile ( @css_files ) {
+<link rel="stylesheet" href="<%RT->Config->Get('WebPath')%><% $cssfile %>" type="text/css" media="all" />
+% }
+
+% for (keys %{$LinkRel || {}}) {
+    <link rel="<% $_ %>" href="<% RT->Config->Get('WebPath') . $LinkRel->{$_} %>" />
+% }
+<link rel="shortcut icon" href="<%RT->Config->Get('WebImagesURL')%>favicon.png" type="image/png" />
+
+% if ( $RSSAutoDiscovery ) {
+    <link rel="alternate" href="<%$RSSAutoDiscovery%>" type="application/rss+xml" title="RSS RT Search" />
+% }
+
+% my $stylesheet_plugin = "/NoAuth/css/".$style."/InHeader";
+% if ($m->comp_exists($stylesheet_plugin) ) {
+<& $stylesheet_plugin &>
+% }
+
+<!-- Site CSS from theme editor -->
+<style type="text/css" media="all" id="sitecss">
+%# Header is used when there isn't a database (such as in the Installer) which means there is no
+%# RT::System object, nor are there attributes.
+% if (blessed(RT->System) and my $attr = RT->System->FirstAttribute('UserCSS')) {
+<% $attr->Content |n %>
+% }
+</style>
+% # Leave %ARGS for backward compatibility
+% $m->callback( %ARGS, CallbackName => 'Head', ARGSRef => \%ARGS );
+
+<& HeaderJavascript, focus => $Focus, onload => $onload, RichText => $RichText, Language => $lang &>
+
+<& /Elements/Framekiller &>
+
+% $m->callback( CallbackName => 'EndOfHead', ARGSRef => \%ARGS );
+
+% } else {
+% $m->callback( CallbackName => 'BoostedEndOfHead', ARGSRef => \%ARGS );
+% }
+</head>
+  <body hx-boost="true" class="<% join( ' ',@{$ARGS{'BodyClass'}} ) %>">
+    <a href="#main-navigation" class="skip-link" accesskey="7"><&|/l&>Skip to main navigation</&></a>
+    <a href="#body" class="skip-link" accesskey="8"><&|/l&>Skip to main content</&></a>
+    <a href="#page-navigation" class="skip-link" accesskey="9"><&|/l&>Skip to page menu</&></a>
+% if ( $ShowMenu ) {
+    <div id="main-navigation" tabindex="-1"><& /Elements/Menu, menu => Menu(), id => 'app-nav' &></div>
+% }
+
+% if ( !$LoadMainContent && $ShowMenu
+%    && RT::Interface::Web->ModernClient()
+%    && ( $DECODED_ARGS->{ModernClient} // 1 )
+%    && !RT::Interface::Web::RequestENV('HTTP_HX_REQUEST')
+%    && ( RT::Interface::Web::RequestENV('REQUEST_METHOD') // 'GET' ) eq 'GET'
+%    && $session{CurrentUser}
+%    && $session{CurrentUser}->Id ) {
+    <div class="<% join( ' ', @{$ARGS{'MainContainerClass'}} ) %>"
+      hx-get="<% RT::Interface::Web::RequestENV('REQUEST_URI') %>"
+      hx-trigger="revealed once"
+      hx-target="this"
+      hx-select=".main-container"
+      hx-swap="outerHTML"
+      <% $id && qq[id="comp-$id"] |n %>
+    >
+      <& /Widgets/Spinner &>
+      <div id='rt-header-container'>
+      <& Footer &>
+% $m->abort;
+% } else {
+    <div class="<% join( ' ', @{$ARGS{'MainContainerClass'}} ) %>" <% $id && qq[id="comp-$id"] |n %>>
+
+%# To refresh main container, here we create a separated div so its hx-* attributes are not inherited.
+      <div
+        hx-get="<% RT::Interface::Web::RequestENV('REQUEST_URI') %>"
+        hx-trigger="reload consume from:.main-container, mainContainerChanged from:body"
+        hx-target="closest .main-container"
+        hx-select=".main-container"
+        hx-swap="outerHTML"
+      ></div>
+% }
+
+% if ( !$m->notes('render-dashboard-email') ) {
+<div id="hx-boost-spinner" class="invisible">
+  <& /Widgets/Spinner, Boost => 1 &>
+</div>
+% }
+
+% if ($Refresh && $Refresh =~ /^(\d+)/ && $1 > 0) {
+%   my $URL = $m->notes->{RefreshURL}; $URL = $URL ? ";URL=$URL" : "";
+    <meta http-equiv="refresh" content="<% "$1$URL" %>" />
+% }
+
+% # The close div for this is in PageLayout right before the rt body div
+% if ( $ShowBar || $ShowTitle ) {
+<div id='rt-header-container'>
+% }
+
+% if ($ShowBar) {
+<& /Elements/Logo, %ARGS &>
+
+<div id="quickbar">
+  <& /Elements/PersonalQuickbar, %ARGS &>
+</div>
+% }
+% if ($ShowTitle) {
+<div id="header"><h1 <% $TitleTrigger ? qq{hx-trigger="$TitleTrigger"} : '' |n %> <% $TitleSource ? qq{hx-get="$TitleSource"} : '' |n %>><% $Title %></h1></div>
+% }
+
+<div class="modal" id="dynamic-modal" tabindex="-1"></div>
+
+<%INIT>
+my $lang = 'en';
+$lang = $session{'CurrentUser'}->LanguageHandle->language_tag
+     if $session{'CurrentUser'}
+     && $session{'CurrentUser'}->LanguageHandle
+     && $session{'CurrentUser'}->LanguageHandle->language_tag;
+
+$m->comp('/Elements/HttpResponseHeaders');
+
+my $id = $m->request_comp->path;
+$id =~ s|^/||g;
+$id =~ s|/|-|g;
+$id =~ s|\.html$||g;
+$id =~ s|index$||g
+    if $id ne 'index';
+$id =~ s|-$||g;
+
+my $style = GetStylesheet();
+my @css_files;
+if ( RT->Config->Get('DevelMode') ) {
+    @css_files = map { "/static/css/$_" } "$style/main.css", RT->Config->Get('CSSFiles');
+}
+else {
+    my $key =
+      RT::Interface::Web::SquishedCSS( $style )->Key;
+    @css_files = "/NoAuth/css/$style/squished-$key.css";
+}
+$m->callback( CallbackName => "MassageCSSFiles", CSSFiles => \@css_files, ARGSRef => \%ARGS );
+
+# We use BodyClass in its $ARGS form so that callbacks have a chance to
+# massage it
+push @{$ARGS{'BodyClass'}}, lc $style;
+push @{$ARGS{'MainContainerClass'}}, 'main-container';
+
+# If user just logged out, we should refresh the whole body.
+if ( $session{CurrentUser} && $session{CurrentUser}->Id ) {
+    require RT::Interface::Web::MenuBuilder;
+
+    if ( RT::Interface::Web::RequestENV('HTTP_HX_REQUEST') ) {
+        $r->headers_out->{'HX-Reselect'} = '.main-container';
+        $r->headers_out->{'HX-Retarget'} = '.main-container';
+        $r->headers_out->{'HX-Reswap'}   = 'outerHTML';
+        RT::Interface::Web::MenuBuilder::BuildMainNav( Menu(), %ARGS ) if $ARGS{BuildMainMenu};
+    }
+    elsif ( Menu() ) {
+        my $request_path = $HTML::Mason::Commands::r->path_info;
+        $request_path =~ s!/{2,}!/!g;
+
+        if ( $request_path =~ m{^/SelfService/} ) {
+            RT::Interface::Web::MenuBuilder::BuildSelfServiceMainNav( Menu(), %ARGS );
+        }
+        else {
+            RT::Interface::Web::MenuBuilder::BuildMainNav( Menu(), %ARGS );
+        }
+
+        my $app_overflow = Menu()->child( overflow => title => loc('More'), sort_order => 99999);
+        # add a child element to make sure we get a dropdown indicator
+        $app_overflow->child(will_be_deleted => raw_html => '');
+    }
+}
+</%INIT>
+
+<%ARGS>
+#$Focus => 'focus'
+$Focus => ''
+$Title =>  'RT'
+$Refresh => 0
+$ShowBar => 1
+$ShowTitle => 1
+$ShowMenu => $session{CurrentUser} && $session{CurrentUser}->Id && Menu() && !RT::Interface::Web::RequestENV('HTTP_HX_REQUEST') ? 1 : 0
+$URL => undef
+$RSSAutoDiscovery => undef
+$onload => undef
+$LinkRel => undef
+$SkipDoctype => 0
+$RichText => 1
+$BodyClass => undef
+$MainContainerClass => undef
+$TitleTrigger => ''
+$TitleSource => ''
+$LoadMainContent => $m->notes('LoadMainContent')
+</%ARGS>

@@ -1,0 +1,195 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<input
+    type="text"
+    id="<% $Name %>"
+    aria-label="<% $Name %>"
+    name="<% $Name %>"
+    class="<% $AutocompleteMultiple ? '' : 'form-control' %>"
+    value="<% $Default || '' %>"
+
+% if (defined $Size) {
+    size="<% $Size %>"
+% }
+
+% if ($Placeholder) {
+    placeholder="<% $Placeholder %>"
+% }
+
+% if ($Autocomplete) {
+    data-autocomplete="<% $AutocompleteType %>"
+% }
+
+% if ($AutocompleteMultiple) {
+    data-autocomplete-multiple
+    autocomplete="off"
+% }
+
+% if ($AutocompleteReturn) {
+    data-autocomplete-return="<% $AutocompleteReturn %>"
+% }
+
+% if ($AutocompleteNobody) {
+    data-autocomplete-include-nobody
+% }
+
+% if ($AutocompleteSystem) {
+    data-autocomplete-include-system
+% }
+
+% if (@options) {
+    data-options="<% JSON(\@options) %>"
+% }
+
+% if (@items) {
+    data-items="<% JSON(\@items) %>"
+% }
+
+% if ($AutocompleteExclude) {
+    data-autocomplete-exclude="<% $AutocompleteExclude %>"
+% }
+
+/>
+% if ($EntryHint) {
+<br>
+<i><font size="-2">
+  <% loc($EntryHint) %>
+</font></i>
+% }
+
+<%INIT>
+my @options;
+my @items;
+if ($AutocompleteMultiple) {
+
+    my $get_autocomplete_option = sub {
+        my $term = shift;
+        return unless $term =~ /\S/;
+        my $json = $m->scomp(
+            "/Helpers/Autocomplete/$AutocompleteType",
+            term => $term,
+            op   => '=',
+            max  => 1,
+            $AutocompleteReturn ? ( return => $AutocompleteReturn ) : (),
+            abort => 0,
+        );
+        if ($json) {
+            if ( my $parsed = JSON::from_json($json) ) {
+                return $parsed->[0] || ();
+            }
+        }
+        return;
+    };
+
+    for my $email ( @$Options ) {
+        if ( my $option = $get_autocomplete_option->( ref $email ? $email->{value} : $email ) ) {
+            # Prefer user format in RT, unless it doesn't have any.
+            if ( $option->{label} ne $option->{value} ) {
+                push @options, $option;
+                next;
+            }
+        }
+        push @options, ref $email ? $email : { label => $email, value => $email };
+    }
+
+    my %checked = map { $_->{value} => $_ } @options;
+    if ( $Default ) {
+        my @list = RT::EmailParser->_ParseEmailAddress( $Default );
+        for my $entry ( @list ) {
+            if ( $entry->{type} eq 'mailbox' ) {
+                my $email = $entry->{value}->address;
+                if ( my $option = $get_autocomplete_option->($email) ) {
+                    if ( $option->{label} ne $option->{value} ) {
+                        if ( !$checked{ $entry->{value} } ) {
+                            push @options, $option;
+                            $checked{ $entry->{value} } = $options[-1];
+                        }
+                        push @items, $email;
+                        next;
+                    }
+                }
+                if ( $checked{$email} ) {
+                    # Keep format in default value if existing option doesn't have it
+                    if ( $checked{$email}{label} eq $checked{$email}{value} && $entry->{value}->format ne $email ) {
+                        $checked{$email}{label} = $entry->{value}->format;
+                    }
+                }
+                else {
+                    push @options, { label => $entry->{value}->format, value => $email };
+                    $checked{$email} = $options[-1];
+                }
+                push @items, $email;
+            }
+            else {
+                # Keep non-email values intact.
+                if ( !$checked{ $entry->{value} } ) {
+                    push @options, { label => $entry->{value}, value => $entry->{value} };
+                    $checked{ $entry->{value} } = $options[-1];
+                }
+                push @items, $entry->{value};
+            }
+        }
+    }
+}
+</%INIT>
+
+<%ARGS>
+$Name
+$Size    => undef
+$Default => ''
+$Autocomplete => 1
+$AutocompleteType => 'Users'
+$AutocompleteMultiple => 0
+$AutocompleteReturn => 'EmailAddress'
+$AutocompleteNobody => 0
+$AutocompleteSystem => 0
+$EntryHint => ''
+$Placeholder => ''
+$Options => []
+$AutocompleteExclude => undef
+</%ARGS>

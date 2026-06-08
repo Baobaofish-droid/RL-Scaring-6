@@ -1,0 +1,416 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%ARGS>
+$Format => undef
+
+%queues => ()
+%catalogs => ()
+
+$Face => undef
+$Size => undef
+$Link => undef
+$Title => undef
+$CalendarDateRange => undef
+
+$AddCol => undef
+$RemoveCol => undef
+$ColUp => undef
+$ColDown => undef
+
+$SelectDisplayColumns => undef
+$CurrentDisplayColumns => undef
+
+$Class => 'RT::Tickets'
+$ObjectType => $Class eq 'RT::Transactions' ? 'RT::Ticket' : ''
+</%ARGS>
+<%init>
+# This can't be in a <once> block, because otherwise we return the
+# same \@fields every request, and keep tacking more CustomFields onto
+# it -- and it grows per request.
+
+# All the things we can display in the format string by default
+my @fields;
+if ( $Class eq 'RT::Transactions' ) {
+    $Format ||= RT->Config->Get('TransactionDefaultSearchResultFormat')->{$ObjectType};
+
+    @fields = qw( id ObjectId ObjectType ObjectName Type Field TimeTaken TimeWorker TimeWorkedDate
+        OldValue NewValue ReferenceType OldReference NewReference
+        Created CreatedRelative CreatedBy Description Content PlainContent HTMLContent
+        TicketId TicketSubject TicketQueue TicketStatus TicketOwner TicketCreator
+        TicketLastUpdatedBy TicketCreated TicketStarted TicketResolved
+        TicketTold TicketLastUpdated TicketDue
+        TicketPriority TicketInitialPriority TicketFinalPriority
+        NEWLINE NBSP );    # loc_qw
+
+    my $CustomFields = RT::CustomFields->new( $session{'CurrentUser'} );
+    foreach my $id ( keys %queues ) {
+
+        # Gotta load up the $queue object, since queues get stored by name now.
+        my $queue = RT::Queue->new( $session{'CurrentUser'} );
+        $queue->Load($id);
+        next unless $queue->Id;
+        $CustomFields->LimitToQueue( $queue->Id );
+        $CustomFields->SetContextObject($queue) if keys %queues == 1;
+    }
+    $CustomFields->Limit(
+        ALIAS           => $CustomFields->_OCFAlias,
+        ENTRYAGGREGATOR => 'OR',
+        FIELD           => 'ObjectId',
+        VALUE           => 0,
+    );
+    $CustomFields->LimitToLookupType('RT::Queue-RT::Ticket-RT::Transaction');
+
+    while ( my $CustomField = $CustomFields->Next ) {
+        push @fields, "CustomField.{" . $CustomField->Name . "}";
+        push @fields, "CustomFieldView.{" . $CustomField->Name . "}";
+    }
+}
+elsif ( $Class eq 'RT::Assets' ) {
+    $Format ||= RT->Config->Get('AssetDefaultSearchResultFormat');
+    @fields = qw(
+        id Name Description Status
+        CreatedBy LastUpdatedBy
+
+        Created     CreatedRelative
+        LastUpdated LastUpdatedRelative
+
+        RefersTo    ReferredToBy
+        DependsOn   DependedOnBy
+        MemberOf    Members
+        Parents     Children
+
+        Owner HeldBy Contacts
+
+        NEWLINE
+        NBSP
+    ); # loc_qw
+
+    my $CustomFields = RT::CustomFields->new( $session{'CurrentUser'});
+    foreach my $id (keys %catalogs) {
+        # Gotta load up the $catalog object, since catalogs get stored by name now.
+        my $catalog = RT::Catalog->new($session{'CurrentUser'});
+        $catalog->Load($id);
+        next unless $catalog->Id;
+        $CustomFields->LimitToCatalog($catalog->Id);
+        $CustomFields->SetContextObject( $catalog ) if keys %catalogs == 1;
+    }
+    $CustomFields->LimitToCatalog(0);
+    while ( my $CustomField = $CustomFields->Next ) {
+        push @fields, "CustomField.{" . $CustomField->Name . "}";
+        push @fields, "CustomFieldView.{" . $CustomField->Name . "}";
+    }
+
+    my $CustomRoles = RT::CustomRoles->new( $session{'CurrentUser'} );
+    foreach my $id ( keys %catalogs ) {
+
+        # Gotta load up the $catalog object, since catalogs get stored by name now.
+        my $catalog = RT::Catalog->new( $session{'CurrentUser'} );
+        $catalog->Load($id);
+        next unless $catalog->Id;
+        $CustomRoles->LimitToObjectId( $catalog->Id );
+    }
+    $CustomRoles->LimitToLookupType( RT::Asset->CustomFieldLookupType ) if $CustomRoles->_isLimited;
+    while ( my $role = $CustomRoles->Next ) {
+        push @fields, 'CustomRole.{' . $role->Name . '}';
+    }
+}
+else {
+    $Format ||= RT->Config->Get('DefaultSearchResultFormat');
+
+    @fields = qw(
+        id QueueName Subject Description
+        Status ExtendedStatus UpdateStatus
+        Type
+
+        OwnerName OwnerNameEdit Requestors Cc AdminCc CreatedBy LastUpdatedBy
+
+        Priority InitialPriority FinalPriority
+
+        TimeWorked TimeLeft TimeEstimated
+
+        Starts      StartsRelative
+        Started     StartedRelative
+        Created     CreatedRelative
+        LastUpdated LastUpdatedRelative
+        Told        ToldRelative
+        Due         DueRelative
+        Resolved    ResolvedRelative
+
+        SLA
+
+        RefersTo    ReferredToBy
+        DependsOn   DependedOnBy
+        MemberOf    Members
+        Parents     Children
+
+        Bookmark    Timer
+        UnreadMessages
+
+        Reply Comment
+
+        NEWLINE
+        NBSP
+        );    # loc_qw
+
+    # Total time worked is an optional ColumnMap enabled for rolling up child
+    # TimeWorked
+    push @fields, 'TotalTimeWorked' if ( RT->Config->Get('DisplayTotalTimeWorked') );
+
+    my $CustomFields = RT::CustomFields->new( $session{'CurrentUser'} );
+    foreach my $id ( keys %queues ) {
+
+        # Gotta load up the $queue object, since queues get stored by name now.
+        my $queue = RT::Queue->new( $session{'CurrentUser'} );
+        $queue->Load($id);
+        next unless $queue->Id;
+        $CustomFields->LimitToQueue( $queue->Id );
+        $CustomFields->SetContextObject($queue) if keys %queues == 1;
+    }
+    $CustomFields->LimitToGlobal;
+
+    while ( my $CustomField = $CustomFields->Next ) {
+        push @fields, "CustomField.{" . $CustomField->Name . "}";
+        push @fields, "CustomFieldView.{" . $CustomField->Name . "}";
+    }
+
+    my $CustomRoles = RT::CustomRoles->new( $session{'CurrentUser'} );
+    foreach my $id ( keys %queues ) {
+
+        # Gotta load up the $queue object, since queues get stored by name now.
+        my $queue = RT::Queue->new( $session{'CurrentUser'} );
+        $queue->Load($id);
+        next unless $queue->Id;
+        $CustomRoles->LimitToObjectId( $queue->Id );
+    }
+    $CustomRoles->LimitToLookupType(RT::Ticket->CustomFieldLookupType) if $CustomRoles->_isLimited;
+
+    my @user_fields = qw/id Name EmailAddress Organization RealName City Country/;
+    my $user_cfs    = RT::CustomFields->new( $session{CurrentUser} );
+    $user_cfs->Limit( FIELD => 'LookupType', VALUE => RT::User->CustomFieldLookupType );
+    while ( my $user_cf = $user_cfs->Next ) {
+        push @user_fields, join '.', 'CustomField', '{' . $user_cf->Name . '}';
+    }
+
+    for my $watcher (qw/AdminCc Cc Owner Requestor/) {
+        for my $user_field (@user_fields) {
+            my $field = join '.', $watcher, $user_field;
+            push @fields, $field;
+        }
+    }
+
+    while ( my $role = $CustomRoles->Next ) {
+        push @fields, 'CustomRole.{' . $role->Name . '}';
+
+        # Add all available CustomRoles to the list of sortable columns.
+        for my $user_field (@user_fields) {
+            push @fields, join '.', 'CustomRole.{' . $role->Name . '}', $user_field;
+        }
+    }
+
+    my %ranges = RT::Ticket->CustomDateRanges;
+    push @fields, sort keys %ranges;
+
+}
+
+$m->callback( Fields => \@fields, ARGSRef => \%ARGS );
+
+my ( @seen);
+
+my @format = $m->comp('/Elements/CollectionAsTable/ParseFormat', Format => $Format);
+foreach my $field (@format) {
+    # "title" is for columns like NEWLINE, which doesn't have "attribute"
+    $field->{Column} = $field->{attribute} || $field->{title} || '<blank>';
+    push @seen, $field;
+}
+
+if ( $RemoveCol ) {
+    # we do this regex match to avoid a non-numeric warning
+    my ($index) = ($CurrentDisplayColumns // '') =~ /^(\d+)/;
+    if ( defined($index) ) {
+        delete $seen[$index];
+        my @temp = @seen;
+        @seen = ();
+        foreach my $element (@temp) {
+            next unless $element;
+            push @seen, $element;
+        }
+    }
+}
+elsif ( $AddCol ) {
+    if ( defined $SelectDisplayColumns ) {
+        my $selected = $SelectDisplayColumns;
+        my @columns;
+        if (ref($selected) eq 'ARRAY') {
+            @columns = @$selected;
+        } else {
+            push @columns, $selected;
+        }
+        foreach my $col (@columns) {
+            my %column = ();
+            $column{Column} = $col;
+            $column{Suffix} = '';
+
+            if ( defined $Face && $Face eq "Bold" ) {
+                $column{Prefix} .= '<span class="fw-bold">';
+                $column{Suffix} = '</span>' . $column{Suffix};
+            }
+            if ( defined $Face && $Face eq "Italic" ) {
+                $column{Prefix} .= '<span class="fst-italic">';
+                $column{Suffix} = '</span>' . $column{Suffix};
+            }
+            if ($Size) {
+                if ( $Size eq 'Large' ) {
+                    $column{Prefix} .= '<span class="fs-4">';
+                    $column{Suffix} = '</span>' . $column{Suffix};
+                }
+                elsif ( $Size eq 'Small' ) {
+                    # Use semantic <small> element (Bootstrap styles it at 0.875em)
+                    $column{Prefix} .= '<small>';
+                    $column{Suffix} = '</small>' . $column{Suffix};
+                }
+                else {
+                    # Backwards compatibility: treat as HTML tag name
+                    $column{Prefix} .= "<" . $m->interp->apply_escapes( $Size,  'h' ) . ">";
+                    $column{Suffix} = "</" . $m->interp->apply_escapes( $Size, 'h' ) . ">" . $column{Suffix};
+                }
+            }
+
+            if ( $Class eq 'RT::Transactions' ) {
+                if ( defined $Link && $Link eq "Display" ) {
+                    $column{Prefix} .= q{<a HREF="__WebPath__/Transaction/Display.html?id=__id__">};
+                    $column{Suffix} .= "</a>";
+                }
+            }
+            elsif ( $Class eq 'RT::Assets' ) {
+                if ( defined $Link && $Link eq "Display" ) {
+                    $column{Prefix} .= q{<a HREF="__WebPath__/Asset/Display.html?id=__id__">};
+                    $column{Suffix} .= "</a>";
+                }
+            }
+            elsif ( $Class eq 'RT::Tickets' ) {
+                if ( defined $Link && $Link eq "Display" ) {
+                    $column{Prefix} .= q{<a HREF="__WebPath__/Ticket/Display.html?id=__id__">};
+                    $column{Suffix} .= "</a>";
+                }
+                elsif ( defined $Link && $Link eq "Take" ) {
+                    $column{Prefix} .= q{<a HREF="__WebPath__/Ticket/Display.html?Action=Take&id=__id__">};
+                    $column{Suffix} .= "</a>";
+                }
+                elsif ( defined $Link && $Link eq "Respond" ) {
+                    $column{Prefix} .= q{<a HREF="__WebPath__/Ticket/Update.html?Action=Respond&id=__id__">};
+                    $column{Suffix} .= "</a>";
+                }
+                elsif ( defined $Link && $Link eq "Comment" ) {
+                    $column{Prefix} .= q{<a HREF="__WebPath__/Ticket/Update.html?Action=Comment&id=__id__">};
+                    $column{Suffix} .= "</a>";
+                }
+                elsif ( defined $Link && $Link eq "Resolve" ) {
+                    $column{Prefix} .= q{<a HREF="__WebPath__/Ticket/Update.html?Action=Comment&DefaultStatus=resolved&id=__id__">};
+                    $column{Suffix} .= "</a>";
+                }
+            }
+
+            if ($Title) {
+                $column{Suffix} .= "/TITLE:" . $m->interp->apply_escapes( $Title, 'h' );
+            }
+            if ($CalendarDateRange) {
+                if ($CalendarDateRange eq 'Start') {
+                    $column{Suffix} .= "/CALENDAR:start";
+                }
+                elsif ($CalendarDateRange eq 'End') {
+                    $column{Suffix} .= "/CALENDAR:end";
+                }
+            }
+            push @seen, \%column;
+        }
+    }
+}
+elsif ( $ColUp ) {
+    my ($index) = ($CurrentDisplayColumns // '') =~ /^(\d+)/;
+    if ( defined $index && ( $index - 1 ) >= 0 ) {
+        my $column = $seen[$index];
+        $seen[$index]       = $seen[ $index - 1 ];
+        $seen[ $index - 1 ] = $column;
+        $CurrentDisplayColumns     = $index - 1;
+    }
+}
+elsif ( $ColDown ) {
+    my ($index) = ($CurrentDisplayColumns // '') =~ /^(\d+)/;
+    if ( defined $index && ( $index + 1 ) < scalar @seen ) {
+        my $column = $seen[$index];
+        $seen[$index]       = $seen[ $index + 1 ];
+        $seen[ $index + 1 ] = $column;
+        $CurrentDisplayColumns     = $index + 1;
+    }
+}
+
+
+my @format_string;
+foreach my $field (@seen) {
+    next unless $field;
+    my $row = "";
+    if ( $field->{'original_string'} ) {
+        $row = $field->{'original_string'};
+    }
+    else {
+        $row .= $field->{'Prefix'} if defined $field->{'Prefix'};
+        $row .= "__$field->{'Column'}__"
+          unless ( $field->{'Column'} eq "<blank>" );
+        $row .= $field->{'Suffix'} if defined $field->{'Suffix'};
+        $row =~ s!([\\'])!\\$1!g;
+        $row = "'$row'";
+    }
+    push( @format_string, $row );
+}
+
+$Format = join(",\n", @format_string);
+
+
+return($Format, \@fields, \@seen);
+
+</%init>

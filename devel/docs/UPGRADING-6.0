@@ -1,0 +1,207 @@
+=head1 UPGRADING FROM RT 5.0.0 and greater
+
+This documentation notes internals changes between the 5.0 and 6.0
+series that are primarily of interest to developers writing extensions
+or local customizations.  It is not an exhaustive list.
+
+=over
+
+=item *
+
+In RT 6, RT's sessions have been refactored to be non-blocking. To
+do this, we needed to change the way RT code interacts with sessions,
+mostly when setting values. If you have code that uses sessions,
+you will need to make changes.
+
+Previously, C<$session> was a global hash you could access directly
+to get or set values for the current logged in user. For example, RT
+would set the current user directly in the session hash with code like:
+
+    $HTML::Mason::Commands::session{'CurrentUser'} = RT::CurrentUser->new();
+
+Starting in RT 6, you also need to explicitly call a C<Set> method to
+store those updates with code like this:
+
+    # Write changes back to persistent session
+    RT::Interface::Web::Session::Set(
+        Key   => 'CurrentUser',
+        Value => $HTML::Mason::Commands::session{'CurrentUser'},
+    );
+
+In addition to C<Set> for setting values, there is a new C<Load> method to
+load values and a C<Delete> to clear values out. You an find examples of all
+of these in the RT 6 code to see how they are used.
+
+The C<$session> hash is still available globally as previously and can be
+accessed directly to get values, so that code does not need to change. This
+is likely the most common interaction with the session in extensions and
+custom code.
+
+These session updates were needed to work with the new C<htmx> architecture
+(see below).
+
+=item *
+
+RT now uses a library called L<htmx|https://htmx.org/>, which makes AJAX
+much easier and allows us to completely change the way pages, components,
+and widgets load and update in RT. You'll see the difference on just about
+every page in RT starting immediately with the home page. This update gives RT
+a much more interactive feel and speeds up nearly every interaction.
+
+Much existing code in callbacks should continue to work, but it will require
+testing because not all callbacks are called with the same context they had
+previously. Many components are now called individually and not in the context
+of a full RT page load and this may change the way code runs and html is
+rendered in responses.
+
+For new development, we think you'll find C<htmx> to be an exciting and fun
+new way to create interactive components in RT. It allows RT to gain all of
+the benefits of a single-page javascript application with easy access to AJAX
+calls and dynamic page content, while still using the server-side Perl tools
+we already know.
+
+=item *
+
+The Quick Create portlet has been updated to use htmx. This means C<index.html>
+and C<Render.html> will no longer be reloaded when the create form is
+submitted. If you previously used the Initial callback in either of these files,
+you can move your logic to the Initial callback in the new /Helpers/QuickCreate
+file where ProcessQuickCreate is now called.
+
+The quick create form also had a callback C<InFormElement> inside the opening
+C<form> tag. This has been removed because any form-specific attributes added
+are unlikely to work with htmx as-is. If you need to modify the form tag,
+you can create an overlay and customize there.
+
+=item *
+
+Now you can customize ticket/asset create/update/display pages via
+L<RT_Config/%PageLayoutMapping> and some callbacks have been removed because of
+the change. If you use these callbacks, you can update your code to use other
+existing callbacks or some new callbacks that have been added. For example,
+there are now callbacks at the start and end of every widget.
+
+The new design also means you can migrate your code into your own custom widget
+and add anywhere using the L<RT_Config/%PageLayoutMapping>.
+
+To make upgrading RT easier, we have ported some of them so they can still
+work in RT 6.0, but they may not look like they did in earlier versions.
+We strongly recommend that you plan to migrate to the new layout.
+
+Affected callbacks include:
+
+=over
+
+=item /Ticket/Display.html BeforeShowSummary
+
+You can switch to C<BeforeWidget> in C</Elements/ShowWidgetSection>.
+
+=item /Ticket/Display.html BeforeShowHistory
+
+It's been ported to C</Ticket/Widgets/Display/History>, but C<Transactions> and
+C<Attachments> arguments are absent. You can switch to C<BeforeWidget>.
+
+=item /Ticket/Create.html AfterOwner
+
+You can switch to C<BeforeCustomFields> in C</Elements/EditCustomFields>.
+
+=item /Ticket/Create.html AfterBasics
+
+You can switch to C<AfterWidget> in C</Ticket/Widgets/Create/Basics>.
+
+=item /Ticket/Create.html BeforeRequestors, AfterRequestors, ModifyCustomRoles, AfterSubject, BeforeMessageBox, and AfterMessageBox
+
+They have been ported to C</Ticket/Widgets/Create/Message> accordingly.
+
+=item /Ticket/Update.html AfterTableOpens, BeforeUpdateType, AfterUpdateType, and AfterWorked
+
+They have been ported to C</Ticket/Widgets/Update/Basics> accordingly.
+
+C<BeforeUpdateType> was incorrectly positioned before C<Queue> item in RT 5,
+now it's right above the "Update Type" input. Previously it could be used to
+not render the hidden "id" input, now "id" is a mandatory input so you can't
+skip it any more.
+
+=item /Ticket/Update.html RightColumnBottom
+
+You can switch to C<AfterWidget> in C</Ticket/Widgets/Update/Basics>.
+
+=item /Ticket/Update.html BeforeScrips and AfterScrips
+
+You can switch to C<BeforeWidget> and C<AfterWidget> in
+C</Ticket/Widgets/Update/PreviewScrips>, respectively.
+
+=item /Ticket/Update.html AfterGnuPG, AfterSubject, BeforeMessageBox, and AfterMessageBox
+
+They have been ported to C</Ticket/Widgets/Update/Message> accordingly.
+
+=item /Asset/Display.html AfterShowSummary
+
+You can switch to C<AfterWidget> in C</Elements/ShowWidgetSection>.
+
+=item /Asset/Display.html AfterShowHistory
+
+It's been ported to C</Asset/Widgets/Display/History>, you can switch to
+C<AfterWidget>.
+
+=back
+
+Also, C</Ticket/Elements/ShowSummary> and C</Asset/Elements/ShowSummary> are
+not called on display pages any more. If you have a customized version, you will
+need to customize corresponding widgets like "/Ticket/Widgets/Display/Basics",
+"/Asset/Widgets/Display/Basics", etc.
+
+=item *
+
+In addition to the above, the following callbacks changed or moved in RT 6.
+
+=over
+
+=item /Elements/Tabs Privileged and and SelfService
+
+These callbacks are used to modify RT's top menu and page menu, usually to
+add new things to the menus. The previous callbacks are still available,
+but RT no longer rebuilds the top navigation menu on every request. If you
+previously used one of these callbacks to modify the top navigation menu
+via C<Menu()>, that will no longer be defined or updated consistently in
+the existing callbacks.
+
+To add items to the main page menu, you can use two new callbacks added
+for this purpose:
+
+    /Elements/Header PrivilegedMainNav
+    /Elements/Header SelfServiceMainNav
+
+=item /Prefs/Other.html BeforeOption
+
+This callback is still in the same location on the rendered page, but it has
+been moved to C</Prefs/Elements/EditUserPrefSections>.
+
+=item /Elements/EditCustomFields AfterCustomFieldValue
+
+The C<AfterCustomFieldValue> callback and some associated code were moved
+from C</Elements/EditCustomFields> to C</Elements/EditCustomField> (note the
+missing 's' in the new filename). Existing callbacks should continue to work for
+now, but you should update your callback path to C<EditCustomField> as the
+old callback path will be removed in the future.
+
+=back
+
+=item *
+
+The id attribute of the body element (e.g., C<comp-Ticket-Display>) has
+been moved to the .main-container element. If you've customized CSS styles
+targeting body with id like C<body#comp-Ticket-Display>, update them to
+C<.main-container#comp-Ticket-Display> or just C<#comp-Ticket-Display>.
+
+=back
+
+=head1 DEPRECATED CODE
+
+Code that is no longer used after updates is marked as deprecated so it will log
+a warning for two versions before we remove it. This gives developers time to
+update their code. RT 6 does introduce some new deprecated code, so watch
+your logs for warnings after upgrading to find out if you need to make
+updates.
+
+=cut

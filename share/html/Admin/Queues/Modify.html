@@ -1,0 +1,417 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Admin/Elements/Header, Title => $title &>
+<& /Elements/Tabs &>
+<& /Elements/ListActions, actions => \@results &>
+
+
+
+<form action="<%RT->Config->Get('WebPath')%>/Admin/Queues/Modify.html" name="ModifyQueue" method="post" enctype="multipart/form-data" class="mx-auto max-width-lg">
+<input type="hidden" class="hidden" name="id" value="<% $Create? 'new': $QueueObj->Id %>" />
+% $m->callback( CallbackName => 'FormStart', Create => $Create, ARGSRef => \%ARGS );
+
+<&| /Widgets/TitleBox, title => loc('Basics'), class => 'queue-info-basics', content_class => 'mx-auto width-sm' &>
+<&| /Elements/LabeledValue, Label => loc('Queue Name') &>
+
+% if ($InternalQueue) {
+      <% $QueueObj->Name %>
+% } else {
+      <input type="text" class="form-control" name="Name" value="<% $Create ? "" : $QueueObj->Name || $Name %>" />
+% }
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc('Description') &>
+      <input type="text" class="form-control" name="Description" value="<% $Create ? "" : $QueueObj->Description || $Description || '' %>" size="60" />
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc('Lifecycle') &>
+% if ($InternalQueue) {
+      <% $QueueObj->Lifecycle %>
+% } else {
+      <& /Widgets/Form/Select:InputOnly,
+          Name         => 'Lifecycle',
+          Values       => [ sort { loc($a) cmp loc($b) } RT::Lifecycle->List ],
+          CurrentValue => $Create ? "default" : $QueueObj->Lifecycle || $ARGS{'Lifecycle'},
+          Default      => 0,
+      &>
+% }
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc('Subject Tag') &>
+    <input type="text" class="form-control" name="SubjectTag" value="<% $ARGS{'SubjectTag'} || ($Create ? "" : $QueueObj->SubjectTag || '' ) %>" size="60" />
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc('Sort Order') &>
+      <input type="text" class="form-control" name="SortOrder" value="<% $Create ? 0 : $QueueObj->SortOrder || $SortOrder || 0 %>" size="60" />
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc('Reply Address') &>
+      <input type="email" class="form-control" name="CorrespondAddress" value="<% $Create ? "" : $QueueObj->CorrespondAddress || $CorrespondAddress || '' %>" />
+      <span><em><&|/l , RT->Config->Get('CorrespondAddress')&>(If left blank, will default to [_1])</&></em></span>
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc('Comment Address') &>
+
+    <input type="email" class="form-control" name="CommentAddress" value="<% $Create ? "" : $QueueObj->CommentAddress || $CommentAddress || '' %>" />
+    <span><em><&|/l , RT->Config->Get('CommentAddress')&>(If left blank, will default to [_1])</&></em></span>
+  </&>
+% $m->callback( CallbackName => 'AfterQueueAddresses', %ARGS, QueueObj => $QueueObj, results => \@results );
+
+  <&| /Elements/LabeledValue, Label => '' &>
+
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input checkbox" id="SLAEnabled" name="SLAEnabled" value="1" 
+% if ( $QueueObj->id && !$QueueObj->SLADisabled ) {
+        checked="checked"
+% }
+        />
+        <label class="form-check-label" for="SLAEnabled"><&|/l&>SLA Enabled (Unchecking this box disables SLA for this queue)</&></label>
+        <input type="hidden" class="hidden" name="SetSLAEnabled" value="1" />
+      </div>
+  </&>
+
+  <& /Elements/EditCustomFields, Object => $QueueObj &>
+
+% if ( RT->Config->Get('Crypt')->{'Enable'} ) {
+  <&| /Elements/LabeledValue, Label => '' &>
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input checkbox" id="Sign" name="Sign" value="1" <% $QueueObj->Sign? 'checked="checked"': '' |n%> />
+        <label class="form-check-label" for="Sign"><&|/l&>Sign by default</&></label>
+      </div>
+   </&>
+
+   <&| /Elements/LabeledValue, Label => '' &>
+
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input checkbox" id="Encrypt" name="Encrypt" value="1" <% $QueueObj->Encrypt? 'checked="checked"': '' |n%> />
+        <label class="form-check-label" for="Encrypt"><&|/l&>Encrypt by default</&></label>
+      </div>
+  </&>
+
+  <&| /Elements/LabeledValue, Label => '' &>
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input checkbox" id="SignAuto" name="SignAuto" value="1" <% $QueueObj->SignAuto? 'checked="checked"': '' |n%> />
+        <label class="form-check-label" for="SignAuto"><&|/l_unsafe, "<b>","</b>","<i>","</i>"&>Sign all auto-generated mail.  [_1]Caution[_2]: Enabling this option alters the signature from providing [_3]authentication[_4] to providing [_3]integrity[_4].</&></label>
+      </div>
+    </&>
+% }
+
+% unless ($InternalQueue) {
+  <&| /Elements/LabeledValue, Label => '' &>
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input checkbox" id="Enabled" name="Enabled" value="1" <%$EnabledChecked|n%> />
+        <label class="form-check-label" for="Enabled"><&|/l&>Enabled (Unchecking this box disables this queue)</&></label>
+        <input type="hidden" class="hidden" name="SetEnabled" value="1" />
+% $m->callback( %ARGS, QueueObj => $QueueObj, results => \@results );
+      </div>
+  </&>
+% }
+
+% if ( RT->Config->Get('Crypt')->{'Enable'} ) {
+  <div class="row mt-2">
+    <div class="col-12"> <% # colspan=4 %>
+      <input type="hidden" class="hidden" name="SetCrypt" value="1" />
+% if ( my $email = $QueueObj->CorrespondAddress || RT->Config->Get('CorrespondAddress') ) {
+      <& /Admin/Elements/ShowKeyInfo, Type => 'private', EmailAddress => $email &>
+% } else {
+      <&|/Widgets/TitleBox, title => loc( 'Private keys') &>
+      <i><&|/l&>You have enabled encryption support but have not set a correspondence address for this queue.</&>
+      <&|/l&>You must set a correspondence address for this queue in order to configure a private key.</&></i>
+      </&>
+% }
+    </div>
+  </div>
+
+  <div class="row mt-2">
+    <div class="col-12"> <% # colspan=4 %>
+% if ( my $email = $QueueObj->CommentAddress || RT->Config->Get('CommentAddress') ) {
+      <& /Admin/Elements/ShowKeyInfo, Type => 'private', EmailAddress => $email &>
+% } else {
+      <&|/Widgets/TitleBox, title => loc( 'Private keys') &>
+      <i><&|/l&>You have enabled encryption support but have not set a correspondence address for this queue.</&>
+      <&|/l&>You must set a correspondence address for this queue in order to configure a private key.</&></i>
+      </&>
+% }
+    </div>
+  </div>
+% }
+
+</&>
+
+<&| /Widgets/TitleBox,
+      title         => loc('Page Layouts'),
+      class         => 'queue-info-page-layouts',
+      content_class => 'mx-auto width-sm',
+&>
+  <& /Admin/Elements/EditPageLayoutMapping, Object => $QueueObj &>
+</&>
+
+  <& /Elements/Submit, Label => ($Create ? loc('Create') : loc('Save Changes')), Name => 'Submit', FullWidth => 1 &>
+
+</form>
+
+
+<%INIT>
+my ($title, @results, @no_redirect_results, $Disabled, $EnabledChecked);
+my $skip_update = 0;
+
+my $QueueObj = RT::Queue->new( $session{'CurrentUser'} );
+
+my ( $ok, $msg );
+if ( ($id && $id ne 'new') || ( $Name && not $id ) ) {
+    if ( $id ) {
+        ( $ok, $msg ) = $QueueObj->Load($id);
+    }
+    else {
+        ( $ok, $msg ) = $QueueObj->Load($Name);
+    }
+    if ( not $ok ) {
+        RT->Logger->error("Unable to load queue with id $id: $msg");
+        Abort(loc("Couldn't load queue '[_1]'", $Name));
+    }
+}
+
+my $CustomFields = $QueueObj->CustomFields;
+
+my ($status, @msg) = $m->comp(
+    '/Elements/ValidateCustomFields',
+    Object       => $QueueObj,
+    CustomFields => $CustomFields,
+    ARGSRef      => \%ARGS,
+);
+unless ($status) {
+    push @results, @msg;
+    $skip_update = 1;
+    if ( $id && $id eq 'new' ) {
+        $Create = 1;
+    }
+}
+
+$EnabledChecked = 'checked="checked"';
+
+my $page_layout_changed;
+
+unless ($Create) {
+    if ( defined $id && $id eq 'new' && not $skip_update ) {
+        my ($val, $msg) = $QueueObj->Create( Name => $Name );
+        $ARGS{Name} = $QueueObj->Name; # In case original Name has leading/trailing spaces
+        if (!$val) {
+            $Create = 1; # Create failed, so bring us back to step 1
+        }
+        push @results, $msg;
+    }
+}
+
+my $class        = 'RT::Ticket';
+my $page_layouts = RT->Config->Get('PageLayouts')->{$class};
+my $mapping      = RT->Config->Get('PageLayoutMapping');
+my $queue_name   = $QueueObj->Name;
+
+if ( $QueueObj->Id && not $skip_update ) {
+    $title = loc('Configuration for queue [_1]', $QueueObj->Name );
+    my @attribs= qw(Description CorrespondAddress CommentAddress Name SortOrder
+        Sign SignAuto Encrypt Lifecycle SubjectTag SLADisabled Disabled);
+
+    # we're asking about enabled on the web page but really care about disabled
+    if ( $SetEnabled ) {
+        $Disabled = $ARGS{'Disabled'} = $Enabled? 0: 1;
+    }
+    if ( $SetSLAEnabled ) {
+        $ARGS{'SLADisabled'} = $SLAEnabled? 0: 1;
+    }
+    if ( $SetCrypt ) {
+        $ARGS{$_} = 0 foreach grep !defined $ARGS{$_} || !length $ARGS{$_},
+            qw(Sign SignAuto Encrypt);
+    }
+
+    $m->callback(
+        CallbackName => 'BeforeUpdate',
+        Queue => $QueueObj,
+        AttributesRef => \@attribs,
+        ARGSRef => \%ARGS,
+    );
+
+    # Stash the Disabled value before update
+    my $disabled_pre_update = $QueueObj->Disabled;
+
+    push @results, UpdateRecordObject(
+        AttributesRef => \@attribs,
+        Object => $QueueObj,
+        ARGSRef => \%ARGS
+    );
+
+    if (   $QueueObj->Disabled
+        && $disabled_pre_update != $QueueObj->Disabled
+        && ( RT->Config->Get("DefaultQueue") // 0 ) == $QueueObj->Id )
+    {
+        # The queue was disabled and it's set as the system default. Tell the admin
+        push @results,
+            loc(
+            'Queue was disabled and it is set as the system DefaultQueue. Update DefaultQueue to an active queue or unset this configuration.'
+            );
+    }
+
+    $Disabled = $ARGS{'Disabled'} = $Enabled? 0: 1;
+
+    $EnabledChecked = "" if $QueueObj->Disabled;
+
+    my @linkresults;
+    $m->callback(
+        results      => \@linkresults,
+        RecordObj    => $QueueObj,
+        ARGSRef      => \%ARGS, 
+        CallbackName => 'ProcessLinks'
+    );
+    push @results, @linkresults;
+    push @results, ProcessObjectCustomFieldUpdates( ARGSRef => \%ARGS, Object => $QueueObj );
+    if ( !$QueueObj->SLADisabled && !( RT->Config->Get('ServiceAgreements') && keys %{RT->Config->Get('ServiceAgreements')}) ) {
+        push @no_redirect_results, loc("You enabled [_1] but [_2] hasn't been configured in RT_SiteConfig.pm, please check '[_3]' for more help", 'SLA', '%ServiceAgreements', 'docs/customizing/sla.pod');
+    }
+    for my $address ( $QueueObj->CorrespondAddress, $QueueObj->CommentAddress ) {
+        next unless $address;
+        my $user = RT::User->new( $session{'CurrentUser'} );
+        $user->LoadByEmail($address);
+        if ( $user->Id && !$user->Disabled ) {
+            push @no_redirect_results,
+                loc(
+                "The address [_1] is already in use by user [_2]. We recommend that you pick another address to avoid email loops and complications with email signing and key management.",
+                $address, $user->Name
+                );
+        }
+    }
+
+    # Handle Page Layouts
+
+    if ( $ARGS{'Submit'} ) {
+        # queue might have been renamed as part of this update
+        # $queue_name will contain the old queue name
+        my $new_queue_name = $QueueObj->Name;
+        for my $page ( sort keys %{ $mapping->{$class} } ) {
+            my $layout = $ARGS{"Layout-$page"};
+
+            my ($queue_type) = grep { $_->{Type} eq 'Queue' } @{ $mapping->{$class}{$page} || [] };
+            if ($queue_type) {
+                if ($layout) {
+                    if ( ( $queue_type->{Layout}{$queue_name} // '' ) ne $layout ) {
+                        $queue_type->{Layout}{$queue_name} = $layout;
+                        $page_layout_changed ||= 1;
+                    }
+                    # update config if queue name changed
+                    if ( $new_queue_name ne $queue_name ) {
+                        $queue_type->{Layout}{$new_queue_name} = delete $queue_type->{Layout}{$queue_name};
+                        $page_layout_changed ||= 1;
+                    }
+                }
+                elsif ( $queue_type->{Layout}{$queue_name} ) {
+                    delete $queue_type->{Layout}{$queue_name};
+                    $page_layout_changed ||= 1;
+                }
+
+                my @cleaned = grep { !ref $_->{Layout} || keys %{ $_->{Layout} } } @{ $mapping->{$class}{$page} };
+                if ( @cleaned != @{ $mapping->{$class}{$page} } ) {
+                    @{ $mapping->{$class}{$page} } = @cleaned;
+                    $page_layout_changed ||= 1;
+                }
+
+            }
+            else {
+                if ($layout) {
+                    # add config using new queue name
+                    unshift @{ $mapping->{$class}{$page} }, { Type => 'Queue', Layout => { $new_queue_name => $layout } };
+                    $page_layout_changed ||= 1;
+                }
+            }
+        }
+    }
+
+    if ($page_layout_changed) {
+        my ( $ret, $msg ) = UpdateConfig( Name => 'PageLayoutMapping', Value => $mapping );
+        if ($ret) {
+            if ( $id ne 'new' ) {
+                # Don't show a changed message when creating a new queue
+                push @results, loc('Page Layouts updated');
+            }
+        }
+        else {
+            push @results, $msg;
+        }
+    }
+
+} else {
+    $title = loc("Create a queue");
+}
+
+my $InternalQueue = ($QueueObj->Id and $QueueObj->Disabled == 2);
+
+# This code does automatic redirection if any updates happen.
+unless ( $skip_update ) {
+    MaybeRedirectForResults(
+        Actions   => \@results,
+        Arguments => { id => $QueueObj->Id },
+    ) if $QueueObj->id;
+}
+
+push @results, @no_redirect_results;
+</%INIT>
+
+
+<%ARGS>
+$id => undef
+$result => undef
+$Name => undef
+$Create => undef
+$Description => undef
+$CorrespondAddress => undef
+$CommentAddress => undef
+$SetSLAEnabled => undef
+$SetEnabled => undef
+$SetCrypt => undef
+$SLAEnabled => undef
+$Enabled => undef
+$SortOrder => undef
+</%ARGS>

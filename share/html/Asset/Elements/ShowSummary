@@ -1,0 +1,156 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%args>
+$AssetObj
+$InlineEdit => 0
+</%args>
+<%init>
+RT->Deprecated( Instead => 'Configuration %PageLayoutMapping', Remove => '6.2' );
+my @sections = (
+    "Basics",   #loc
+    "People",   #loc
+    "Dates",    #loc
+    "Links",    #loc
+);
+
+my %link;
+for my $section (@sections) {
+    my $page = $section eq 'Basics' ? "Modify.html" : "Modify$section.html";
+    $link{$section} =
+        RT->Config->Get("WebPath")
+        . "/Asset/$page?id="
+        . $AssetObj->id;
+}
+
+my $can_modify = $AssetObj->CurrentUserHasRight('ModifyAsset');
+my $can_modify_cf = $AssetObj->CurrentUserHasRight('ModifyCustomField');
+
+$m->callback( CallbackName => 'ModifyRights', %ARGS, AssetObj => $AssetObj, ARGSRef => \%ARGS,
+    CanModify => \$can_modify, CanModifyCF => \$can_modify_cf );
+
+my $edit_label = $m->interp->apply_escapes( loc("Edit"), 'h' );
+my $cancel_label = $m->interp->apply_escapes( loc("Cancel"), 'h' );
+
+my %inline_edit_behavior;
+if (RT->Config->Get('InlineEditPanelBehavior')) {
+    %inline_edit_behavior = %{ RT->Config->Get('InlineEditPanelBehavior')->{'RT::Asset'} || {} };
+}
+
+# Hide Dates as there are no editable core fields, unless some custom fields are grouped there.
+if ( !$inline_edit_behavior{Dates} ) {
+    my $hide = 1;
+    my $cf_groupings = RT->Config->Get('CustomFieldGroupings');
+    if ( $cf_groupings && $cf_groupings->{'RT::Asset'} ) {
+        my %asset_cf_grouping
+            = @{$cf_groupings->{'RT::Asset'}{ $AssetObj->CatalogObj->__Value('Name') } || $cf_groupings->{'RT::Asset'}{Default} || []};
+        $hide = 0 if @{ $asset_cf_grouping{Dates} || [] };
+    }
+    $inline_edit_behavior{Dates} = 'hide' if $hide;
+}
+
+my $modify_inline
+    = '<a class="inline-edit-toggle edit" href="%s">'
+    . '<span class="rt-inline-icon border rounded">'
+    . GetSVGImage( Name => 'pencil', Title => $edit_label )
+    . '</span>'
+    . '</a>'
+    . '<a class="inline-edit-toggle cancel hidden" href="#">'
+    . '<span class="rt-inline-icon border rounded">'
+    . GetSVGImage( Name => 'close', Title => $cancel_label )
+    . '</span>'
+    . '</a>';
+</%init>
+<div class="asset-metadata">
+  <div class="row mt-2">
+% for my $section (@sections) {
+% my $modify_url = sprintf( $modify_inline, $m->interp->apply_escapes( $link{$section}, 'h' ) );
+% my $modify_behavior = $InlineEdit ? ($inline_edit_behavior{$section} || $inline_edit_behavior{_default} || 'link') : 'hide';
+
+      <div class="col-4">
+        <&| /Widgets/TitleBox, title => loc($section), title_href => ($can_modify || $can_modify_cf) ? $link{$section} : "", title_class => "inverse",
+        (($can_modify || $can_modify_cf) && $modify_behavior =~ /^(link|click)$/ ? (titleright_raw => $modify_url) : ()),
+        class => (join " ", "asset-\L$section", ($modify_behavior eq 'always' ? 'editing' : ())),
+        data => { 'inline-edit-behavior' => $modify_behavior }
+        &>
+%       unless ($modify_behavior eq 'always') {
+          <div class="inline-edit-display">
+            <& "Show$section", AssetObj => $AssetObj &>
+          </div>
+%       }
+%       if ($modify_behavior ne 'hide') {
+          <form class="inline-edit" action="<%RT->Config->Get('WebPath')%>/Asset/Display.html" method="post" enctype="multipart/form-data">
+            <input type="hidden" class="hidden" name="id" value="<% $AssetObj->id %>" />
+%           if ( $section eq 'Links' ) {
+              <& /Elements/EditLinks, Object => $AssetObj, TwoColumn => 0 &>
+              <& /Elements/EditCustomFields, Object => $AssetObj, Grouping => $section, InTable => 1 &>
+%           } elsif ( $section eq 'People' ) {
+              <& /Asset/Elements/EditPeopleInline, AssetObj => $AssetObj &>
+%           } else {
+              <& "/Asset/Elements/Edit$section", AssetObj => $AssetObj &>
+%           }
+            <div class="row mt-2">
+              <div class="col-12 text-end">
+                <input type="submit" class="btn btn-primary" value="<&|/l&>Save</&>" />
+              </div>
+            </div>
+          </form>
+%       }
+        </&>
+      </div>
+% }
+
+    <& /Elements/ShowCustomFieldCustomGroupings,
+      Object => $AssetObj,
+      title_href => ($can_modify || $can_modify_cf) ? RT->Config->Get("WebPath") . "/Asset/ModifyCFs.html" : "",
+      TitleBoxARGS => { title_class => "inverse" },
+      GroupingClass => 'col-4',
+      InlineEdit => ($can_modify || $can_modify_cf) ? $InlineEdit : 0,
+      ActionURL  => RT->Config->Get('WebPath') . '/Asset/Display.html',
+    &>
+  </div>
+</div>

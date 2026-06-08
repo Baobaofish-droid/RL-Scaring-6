@@ -1,0 +1,441 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Elements/Header, Title => $title &>
+<& /Elements/Tabs &>
+
+% $m->callback( CallbackName => 'BeforeResults', ARGSRef => \%ARGS, Query => $Query, Format => \$Format, DisplayFormat => \$DisplayFormat );
+
+<& /Elements/ListActions, actions => \@results &>
+<form method="post" action="<% RT->Config->Get('WebPath') %>/Search/Bulk.html" enctype="multipart/form-data" name="BulkUpdate" id="BulkUpdate">
+% foreach my $var (qw(Query Format OrderBy Order Rows Page SavedSearchId SavedChartSearchId Token)) {
+<input type="hidden" class="hidden" name="<%$var%>" value="<%$ARGS{$var} || ''%>" />
+%}
+
+% for my $input ( @ExtraQueryParams ) {
+<input type="hidden" class="hidden" name="ExtraQueryParams" value="<% $input %>" />
+%   if ( defined $ARGS{$input} ) {
+<input type="hidden" class="hidden" name="<% $input %>" value="<% $ARGS{$input} %>" />
+%   }
+% }
+
+<& /Elements/CollectionList, 
+    Query => $Query,
+    DisplayFormat => $DisplayFormat,
+    Format => $Format,
+    AllowSorting => 1,
+    OrderBy => $OrderBy,
+    Order => $Order,
+    Rows => $Rows,
+    Page => $Page,
+    BaseURL => RT->Config->Get('WebPath')."/Search/Bulk.html?",
+    Class => 'RT::Tickets',
+    InlineEdit => 0,
+   &>
+
+% $m->callback(CallbackName => 'AfterTicketList', ARGSRef => \%ARGS);
+
+<hr />
+
+<& /Elements/Submit, Label => loc('Update'), CheckboxNameRegex => '/^UpdateTicket(All)?$/', CheckAll => 1, ClearAll => 1, FullWidth => 1 &>
+
+<&|/Widgets/TitleBox, title => $title &>
+  <div class="row">
+    <div class="col-6">
+
+      <&| /Elements/LabeledValue, Label => loc("Make Owner") &>
+        <& /Elements/SelectOwner, Name => "Owner", Default => $ARGS{Owner} || '' &>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => '' &>
+          <div class="form-check">
+            <input type="checkbox" id="ForceOwnerChange" class="checkbox form-check-input" name="ForceOwnerChange"
+              <% $ARGS{ForceOwnerChange} ? 'checked="checked"' : '' %>
+            />
+            <label for="ForceOwnerChange" class="form-check-label">(<&|/l&>Force change</&>)</label>
+          </div>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc("Add Requestor") &>
+        <& /Elements/EmailInput, Name => "AddRequestor", Size=> 20, Default => $ARGS{AddRequestor}, AutocompleteType => 'Principals' &>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc("Remove Requestor") &>
+        <& /Elements/EmailInput, Name => "DeleteRequestor", Size=> 20, Default => $ARGS{DeleteRequestor}, AutocompleteType => 'Principals' &>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => '' &>
+          <div class="form-check">
+            <input type="checkbox" id="ClearRequestor" class="checkbox form-check-input" name="ClearRequestor"
+              <% $ARGS{ClearRequestor} ? 'checked="checked"' : '' %>
+            />
+            <label for="ClearRequestor" class="form-check-label"><&|/l&>Clear Requestor</&></label>
+          </div>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc("Add Cc") &>
+        <& /Elements/EmailInput, Name => "AddCc", Size=> 20, Default => $ARGS{AddCc}, AutocompleteType => 'Principals' &>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc("Remove Cc") &>
+        <& /Elements/EmailInput, Name => "DeleteCc", Size=> 20, Default => $ARGS{DeleteCc}, AutocompleteType => 'Principals' &>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => '' &>
+        <div class="form-check">
+          <input type="checkbox" id="ClearCc" class="checkbox form-check-input" name="ClearRequestor"
+            <% $ARGS{ClearCc} ? 'checked="checked"' : '' %>
+          />
+        <label for="ClearCc" class="form-check-label"><&|/l&>Clear Cc</&></label>
+        </div>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc("Add AdminCc") &>
+          <& /Elements/EmailInput, Name => "AddAdminCc", Size=> 20, Default => $ARGS{AddAdminCc}, AutocompleteType => 'Principals' &>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc("Remove AdminCc") &>
+        <& /Elements/EmailInput, Name => "DeleteAdminCc", Size=> 20, Default => $ARGS{DeleteAdminCc}, AutocompleteType => 'Principals' &>
+      </&>
+
+    <&| /Elements/LabeledValue, Label => '' &>
+        <div class="form-check">
+          <input type="checkbox" id="ClearAdminCc" class="checkbox form-check-input" name="ClearAdminCc"
+            <% $ARGS{ClearAdminCc} ? 'checked="checked"' : '' %>
+          />
+          <label for="ClearAdminCc" class="form-check-label"><&|/l&>Clear AdminCc</&></label>
+        </div>
+      </&>
+
+% my $single_roles = RT::CustomRoles->new($session{CurrentUser});
+% $single_roles->LimitToLookupType(RT::Ticket->CustomFieldLookupType);
+% $single_roles->LimitToSingleValue;
+% $single_roles->LimitToObjectId($_) for keys %$seen_queues;
+% while (my $role = $single_roles->Next) {
+  <&| /Elements/LabeledValue, Label => loc("Make [_1]", $role->Name), LabelTooltip => $role->EntryHint &>
+    <& /Elements/SingleUserRoleInput, role => $role, ShowPlaceholder => 0, ShowEntryHint => 0, Size => 20, Default => $ARGS{"RT::CustomRole-" . $role->Id} &>
+  </&>
+% }
+
+% my $multi_roles = RT::CustomRoles->new($session{CurrentUser});
+% $multi_roles->LimitToLookupType(RT::Ticket->CustomFieldLookupType);
+% $multi_roles->LimitToMultipleValue;
+% $multi_roles->LimitToObjectId($_) for keys %$seen_queues;
+% while (my $role = $multi_roles->Next) {
+  <&| /Elements/LabeledValue, Label => loc("Add [_1]", $role->Name), LabelTooltip => $role->EntryHint &>
+    <& /Elements/MultiUserRoleInput, role => $role, Name => "AddRT::CustomRole-" . $role->Id, Size=> 20, Default => $ARGS{"AddRT::CustomRole-" . $role->Id}, AutocompleteMultiple => 0 &>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Remove [_1]", $role->Name), LabelTooltip => $role->EntryHint &>
+    <& /Elements/MultiUserRoleInput, role => $role, Name => "DeleteRT::CustomRole-" . $role->Id, Size=> 20, Default => $ARGS{"DeleteRT::CustomRole-" . $role->Id}, AutocompleteMultiple => 0 &>
+  </&>
+
+  <&| /Elements/LabeledValue, Label => '' &>
+    <div class="form-check">
+     <input type="checkbox" id="ClearRT::CustomRole-<% $role->Id %>" class="checkbox form-check-input" name="ClearRT::CustomRole-<% $role->Id %>"
+      <% $ARGS{'ClearRT::CustomRole-' . $role->Id} ? 'checked="checked"' : '' %>
+    />
+    <label for="ClearRT::CustomRole-<% $role->Id %>" class="form-check-label"><&|/l, $role->Name&>Clear [_1]</&></label>
+  </div>
+</&>
+% }
+
+    </div>
+    <div class="col-6">
+      <&| /Elements/LabeledValue, Label => loc("Make subject") &>
+        <input class="form-control" type="text" name="Subject" size="20" value="<% $ARGS{Subject} || '' %>"/>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc("Make priority") &>
+        <& /Elements/SelectPriority, Name => "Priority", Default => $ARGS{Priority}, Queues => $seen_queues &>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc("Make queue") &>
+        <& /Elements/SelectQueue, Name => "Queue", Default => $ARGS{Queue} &>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc("Make status") &>
+        <& /Ticket/Elements/SelectStatus, Name => "Status", Default => $ARGS{Status}, Queues => $seen_queues &>
+      </&>
+
+% if ($hasSLA) {
+  <&| /Elements/LabeledValue, Label => loc("Make SLA") &>
+    <& /Elements/SelectSLA, Name => "SLA", Default => $ARGS{SLA} &>
+  </&>
+% }
+
+<&| /Elements/LabeledValue, Label => loc("Make date Starts") &>
+  <& /Elements/SelectDate, Name => "Starts_Date", Default => $ARGS{Starts_Date} || '' &>
+</&>
+
+<&| /Elements/LabeledValue, Label => loc("Make date Started") &>
+  <& /Elements/SelectDate, Name => "Started_Date", Default => $ARGS{Started_Date} || '' &>
+</&>
+
+<&| /Elements/LabeledValue, Label => loc("Make date Told") &>
+  <& /Elements/SelectDate, Name => "Told_Date", Default => $ARGS{Told_Date} || '' &>
+</&>
+
+<&| /Elements/LabeledValue, Label => loc("Make date Due") &>
+  <& /Elements/SelectDate, Name => "Due_Date", Default => $ARGS{Due_Date} || '' &>
+</&>
+    </div>
+  </div>
+</&>
+<&| /Widgets/TitleBox, title => loc('Add comments or replies to selected tickets') &>
+  <&| /Elements/LabeledValue, Label => loc("Update Type") &>
+      <select class="form-select selectpicker" name="UpdateType" id="UpdateType">
+          <option value="private" <% $ARGS{UpdateType} && $ARGS{UpdateType} eq 'private' ? 'selected="selected"' : '' %> ><&|/l&>Comments (Not sent to requestors)</&></option>
+        <option value="response" <% $ARGS{UpdateType} && $ARGS{UpdateType} eq 'response' ? 'selected="selected"' : '' %>><&|/l&>Reply to requestors</&></option>
+      </select> 
+  </&>
+
+  <&| /Elements/LabeledValue, Label => loc("Subject") &>
+      <input class="form-control" type="text" name="UpdateSubject" size="60" value="<% $ARGS{UpdateSubject} || "" %>" />
+  </&>
+% $m->callback( %ARGS, CallbackName => 'AfterUpdateSubject' );
+
+% $m->callback( CallbackName => 'BeforeTransactionCustomFields', CustomFields => $TxnCFs );
+% while (my $CF = $TxnCFs->Next()) {
+  <div class="value col-9">
+    <& /Elements/EditCustomField,
+       CustomField => $CF,
+       Object => RT::Transaction->new( $session{'CurrentUser'} ),
+    &>
+  </div>
+% } # end if while
+
+  <div class="messagebox-container action-<% $ARGS{UpdateType} || 'private' %>">
+% $m->callback( %ARGS, CallbackName => 'BeforeMessageBox' );
+%# Currently, bulk update always starts with Comment not Reply selected, so we check this unconditionally
+% my $IncludeSignature = RT->Config->Get('MessageBoxIncludeSignatureOnComment');
+    <& /Elements/MessageBox, Name => "UpdateContent",
+        $ARGS{UpdateContent} ? ( Default => $ARGS{UpdateContent}, IncludeSignature => 0 ) :
+          ( IncludeSignature => $IncludeSignature ), FullWidth => 1
+    &>
+  </div>
+
+  <& /Ticket/Elements/AddAttachments, %ARGS &>
+</&>
+
+<%perl>
+my $cfs = RT::CustomFields->new($session{'CurrentUser'});
+$cfs->LimitToGlobal();
+$cfs->LimitToQueue($_) for keys %$seen_queues;
+$cfs->SetContextObject( values %$seen_queues ) if keys %$seen_queues == 1;
+</%perl>
+
+% if ( $cfs->Count ) {
+<&|/Widgets/TitleBox, title => loc('Edit Custom Fields') &>
+<& /Elements/BulkCustomFields, $ARGS{'AddMoreAttach'} ? %ARGS : (), CustomFields => $cfs &>
+</&>
+% }
+
+<&|/Widgets/TitleBox, title => loc('Edit Links'), color => "#336633"&>
+<& /Elements/BulkLinks, Collection => $Tickets, $ARGS{'AddMoreAttach'} ? %ARGS : () &>
+</&>
+
+<&| /Widgets/TitleBox, title => loc('Merge'), color => '#336633' &>
+<& /Ticket/Elements/EditMerge, Tickets => $Tickets, %ARGS &>
+</&>
+
+<& /Elements/Submit, Label => loc('Update'), FullWidth => 1 &>
+
+</form>
+
+%# Keyboard shortcuts info
+<div class="clear"></div>
+<div class="keyboard-shortcuts footer">
+    <p><&|/l_unsafe, '<span class="keyboard-shortcuts-key">?</span>' &>Press [_1] to view keyboard shortcuts.</&></p>
+</div>
+
+<%INIT>
+Abort( loc("Permission Denied") ) unless $session{CurrentUser}->HasRight( Right => 'ShowSearchBulkUpdate', Object => RT->System );
+
+my (@results);
+
+$m->callback(CallbackName => 'Initial', ARGSRef => \%ARGS, results_ref => \@results, QueryRef => \$Query, UpdateTicketRef => \@UpdateTicket);
+
+unless ( defined $Rows ) {
+    $Rows = $RowsPerPage;
+    $ARGS{Rows} = $RowsPerPage;
+}
+my $title = loc("Update multiple tickets");
+
+# Iterate through the ARGS hash and remove anything with a null value.
+map ( $ARGS{$_} =~ /^$/ && ( delete $ARGS{$_} ), keys %ARGS );
+
+ProcessAttachments(ARGSRef => \%ARGS);
+
+$Page ||= 1;
+
+$Format ||= RT->Config->Get('DefaultSearchResultFormat');
+
+my $DisplayFormat = "'__CheckBox.{UpdateTicket}__',". $Format;
+$DisplayFormat =~ s/\s*,\s*('?__NEWLINE__'?)/,$1,''/gi;
+
+$DECODED_ARGS->{'UpdateTicketAll'} = 1 unless @UpdateTicket;
+
+my $Tickets = RT::Tickets->new( $session{'CurrentUser'} );
+$Tickets->FromSQL($Query);
+if ( $OrderBy =~ /\|/ ) {
+
+  # Multiple Sorts
+  my @OrderBy = split /\|/, $OrderBy;
+  my @Order   = split /\|/, $Order;
+  $Tickets->OrderByCols(
+    map { { FIELD => $OrderBy[$_], ORDER => $Order[$_] } }
+      ( 0 .. $#OrderBy ) );
+}
+else {
+  $Tickets->OrderBy( FIELD => $OrderBy, ORDER => $Order );
+}
+
+$Tickets->RowsPerPage($Rows) if ($Rows);
+$Tickets->GotoPage( $Page - 1 );    # SB uses page 0 as the first page
+
+Abort( loc("No search to operate on.") ) unless ($Tickets);
+
+$m->callback( CallbackName => 'MassageTickets', Tickets => $Tickets, ARGSRef => \%ARGS );
+
+# build up a list of all custom fields for tickets that we're displaying, so
+# we can display sane edit widgets.
+
+my $fields      = {};
+my $seen_queues = {};
+while ( my $ticket = $Tickets->Next ) {
+    next if $seen_queues->{ $ticket->Queue };
+    $seen_queues->{ $ticket->Queue } ||= $ticket->QueueObj;
+
+    my $custom_fields = $ticket->CustomFields;
+    while ( my $field = $custom_fields->Next ) {
+        $fields->{ $field->id } = $field;
+    }
+}
+
+# determine if any of the queues seen has a SLA active
+my $queue = RT::Queue->new($session{CurrentUser});
+my $hasSLA = 0;
+for (keys %$seen_queues) {
+    $queue->Load($_);
+    $hasSLA ||= ! $queue->SLADisabled();
+}
+
+#Iterate through each ticket we've been handed
+my @linkresults;
+
+$Tickets->RedoSearch();
+
+unless ( $ARGS{'AddMoreAttach'} ) {
+    $RT::Handle->BeginTransaction;
+    while ( my $Ticket = $Tickets->Next ) {
+        my $tid = $Ticket->id;
+        next unless grep $tid == $_, @UpdateTicket;
+
+        $Ticket->LockForUpdate;
+
+        #Update the links
+        $ARGS{'id'} = $Ticket->id;
+
+        my @updateresults = ProcessUpdateMessage(
+            TicketObj       => $Ticket,
+            ARGSRef         => \%ARGS,
+            KeepAttachments => 1,
+        );
+
+        #Update the basics.
+        my @basicresults =
+          ProcessTicketBasics( TicketObj => $Ticket, ARGSRef => \%ARGS );
+        my @dateresults =
+          ProcessTicketDates( TicketObj => $Ticket, ARGSRef => \%ARGS );
+
+        #Update the watchers
+        my @watchresults =
+          ProcessTicketWatchers( TicketObj => $Ticket, ARGSRef => \%ARGS );
+
+        @linkresults =
+            ProcessTicketLinks( TicketObj => $Ticket, TicketId => 'Ticket', ARGSRef => \%ARGS );
+
+        my @cfresults = ProcessRecordBulkCustomFields( RecordObj => $Ticket, ARGSRef => \%ARGS );
+
+        my @tempresults = (
+            grep { defined }
+            @watchresults,  @basicresults, @dateresults,
+            @updateresults, @linkresults,  @cfresults
+        );
+
+        my $prefix = loc('Ticket') . ' ' . $Ticket->Id . ': ';
+        @tempresults = map { /^$prefix/ ? $_ : loc( "Ticket [_1]: [_2]", $Ticket->Id, $_ ) } @tempresults;
+
+        @results = ( @results, @tempresults );
+    }
+    $RT::Handle->Commit;
+
+    RT::Interface::Web::Session::Delete(
+        Key    => 'Attachments',
+        SubKey => $ARGS{'Token'},
+    );
+
+    $Tickets->RedoSearch();
+}
+
+my $TxnCFs = RT::CustomFields->new( $session{CurrentUser} );
+$TxnCFs->LimitToLookupType( RT::Transaction->CustomFieldLookupType );
+$TxnCFs->LimitToGlobalOrObjectId( keys %$seen_queues );
+$TxnCFs->SetContextObject( values %$seen_queues ) if keys %$seen_queues == 1;
+
+</%INIT>
+<%args>
+$Format => undef
+$Page => 1
+$Rows => undef
+$RowsPerPage => undef
+$Order => 'ASC'
+$OrderBy => 'id'
+$Query => undef
+@UpdateTicket => ()
+@ExtraQueryParams => ()
+</%args>

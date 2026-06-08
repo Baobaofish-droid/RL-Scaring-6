@@ -1,0 +1,158 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%args>
+$Language => 'en'
+$ContentLanguage => 'en'
+</%args>
+<%init>
+my $Config = {};
+$Config->{$_} = RT->Config->Get( $_, $session{CurrentUser} )
+  for qw(rtname WebURL WebPath MessageBoxRichText MessageBoxRichTextHeight
+         MaxAttachmentSize WebDefaultStylesheet QuoteSelectedText OldestTransactionsFirst
+         MessageBoxRichTextInitArguments EnableKeyboardShortcuts);
+
+# In case the value is string '0', which is true in js if condition.
+$Config->{EnableKeyboardShortcuts} = 0 unless $Config->{EnableKeyboardShortcuts};
+
+# JS-only config value. Setting default here, can be reset with
+# the Data callback below.
+# Converts dropdowns longer than the limit to live search selects.
+$Config->{'SelectLiveSearchLimit'} = 10;
+
+my $CurrentUser = {};
+if ($session{CurrentUser} and $session{CurrentUser}->id) {
+    $CurrentUser->{$_} = $session{CurrentUser}->$_
+      for qw(id Name EmailAddress RealName);
+
+    $CurrentUser->{Privileged} = $session{CurrentUser}->Privileged
+        ? JSON::true : JSON::false;
+
+    $Config->{WebHomePath} = RT->Config->Get("WebPath")
+        . (!$session{CurrentUser}->Privileged ? "/SelfService" : "");
+
+    if ( $Language && $Language ne 'en' )
+    {
+        $Config->{MessageBoxRichTextInitArguments}{language}{ui} = $Language;
+        $Config->{MessageBoxRichTextInitArguments}{language}{content} = $Language;
+    }
+}
+
+my $Catalog = {
+    quote_in_filename => "Filenames with double quotes can not be uploaded.", #loc
+    attachment_warning_regex => "\\b(re)?attach", #loc
+    shortcut_help_error => "Unable to open shortcut help. Reason:", #loc
+    error => "Error", #loc
+    check => "Check", #loc
+    remove => "Remove", #loc
+    loading => "Loading...", #loc
+    try_again => "Try again", #loc
+    no_results => "No results", # loc
+    contains => "Contains", # loc
+    lower_disabled => "disabled", # loc
+    history_scroll_error => "Could not load ticket history. Reason:", #loc
+    unclip => "Show all", #loc
+    clip => "Show less", #loc
+    show_details => "Show Details", #loc
+    hide_details => "Hide Details", #loc
+    http_message_500 => 'Server Error: Unable to load content for this request.', # loc
+    http_message_400 => 'Client Request Error: Unable to process this request.', # loc
+    http_message_401 => 'Client Request Error: Unauthorized.', # loc
+    http_message_403 => 'Client Request Error: Permission Denied.', # loc
+    http_message_404 => 'Client Request Error: The requested URL was not found.', # loc
+    http_message_network => 'Network Error: Unable to reach the RT server.', # loc
+    http_message_network_get => 'Network Error: Unable to reach the RT server. Retrying...', # loc
+    revoke => 'Revoke', # loc
+};
+$_ = loc($_) for values %$Catalog;
+
+$Catalog->{date_time_picker} = {
+    today           => 'Go to today',         # loc
+    clear           => 'Clear selection',     # loc
+    close           => 'Close the picker',    # loc
+    selectMonth     => 'Select Month',        # loc
+    previousMonth   => 'Previous Month',      # loc
+    nextMonth       => 'Next Month',          # loc
+    selectYear      => 'Select Year',         # loc
+    previousYear    => 'Previous Year',       # loc
+    nextYear        => 'Next Year',           # loc
+    selectDecade    => 'Select Decade',       # loc
+    previousDecade  => 'Previous Decade',     # loc
+    nextDecade      => 'Next Decade',         # loc
+    previousCentury => 'Previous Century',    # loc
+    nextCentury     => 'Next Century',        # loc
+    pickHour        => 'Pick Hour',           # loc
+    incrementHour   => 'Increment Hour',      # loc
+    decrementHour   => 'Decrement Hour',      # loc
+    pickMinute      => 'Pick Minute',         # loc
+    incrementMinute => 'Increment Minute',    # loc
+    decrementMinute => 'Decrement Minute',    # loc
+    pickSecond      => 'Pick Second',         # loc
+    incrementSecond => 'Increment Second',    # loc
+    decrementSecond => 'Decrement Second',    # loc
+    toggleMeridiem  => 'Toggle Meridiem',     # loc
+    selectTime      => 'Select Time',         # loc
+    selectDate      => 'Select Date',         # loc
+};
+
+$_ = loc($_) for values %{$Catalog->{date_time_picker}};
+
+$m->callback(
+    CallbackName    => "Data",
+    CurrentUser     => $CurrentUser,
+    Config          => $Config,
+    Catalog         => $Catalog,
+);
+</%init>
+<script>
+window.RT = {};
+RT.CurrentUser = <% JSON( $CurrentUser ) |n%>;
+RT.Config      = <% JSON( $Config      ) |n%>;
+
+RT.I18N = {};
+RT.I18N.Catalog = <% JSON( $Catalog ) |n %>;
+</script>

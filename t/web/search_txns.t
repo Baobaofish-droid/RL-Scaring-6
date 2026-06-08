@@ -1,0 +1,124 @@
+use strict;
+use warnings;
+
+use RT::Test tests => undef;
+my ( $baseurl, $m ) = RT::Test->started_ok;
+
+my $ticket = RT::Ticket->new( RT->SystemUser );
+$ticket->Create(
+    Subject   => 'Test ticket',
+    Queue     => 'General',
+    Owner     => 'root',
+);
+
+ok( $ticket->SetStatus('open') );
+
+is( $ticket->Transactions->Count, 3, 'Ticket has 3 txns' );
+
+$m->login;
+
+diag "Query builder";
+{
+    $m->follow_link_ok( { text => 'New Search', url_regex => qr/Class=RT::Transaction/ }, 'Query builder' );
+    $m->title_is('Transaction Query Builder');
+
+    $m->form_name('BuildQuery');
+    $m->field( TicketIdOp      => '=' );
+    $m->field( ValueOfTicketId => 1 );
+    $m->click('AddClause');
+
+    $m->follow_link_ok( { id => 'page-results' } );
+    $m->title_is('Found 3 transactions');
+    $m->get_ok($m->uri . '&RowsPerPage=1');
+    $m->follow_link_ok( { text => '2' } );
+    $m->follow_link_ok( { text => '3' } );
+
+    $m->follow_link_ok( { text => 'Edit Search' }, 'Build Query' );
+    my $form = $m->form_name('BuildQuery');
+    is($form->find_input('Query')->value, qq{TicketType = 'ticket' AND ObjectType = 'RT::Ticket' AND TicketId = 1});
+
+    $m->field( TypeOp      => '=' );
+    $m->field( ValueOfType => 'Create' );
+    $m->click('AddClause');
+
+    $m->follow_link_ok( { id => 'page-results' } );
+    $m->title_is('Found 1 transaction');
+    $m->text_contains( 'Ticket created', 'Got create txn' );
+}
+
+diag "Advanced";
+{
+    $m->follow_link_ok( { text => 'New Search', url_regex => qr/Class=RT::Transaction/ }, 'Query builder' );
+    $m->follow_link_ok( { text => 'Advanced' }, 'Advanced' );
+    $m->title_is('Edit Transaction Query');
+
+    $m->form_name('BuildQueryAdvanced');
+    $m->field( Query => q{OldValue = } );
+    $m->submit;
+    $m->text_contains('Incomplete query', 'Got the parse error');
+    $m->title_is('Edit Transaction Query', 'Still on transaction search');
+
+    $m->form_name('BuildQueryAdvanced');
+    $m->field( Query => q{OldValue = 'new'} );
+    $m->submit;
+
+    $m->follow_link_ok( { id => 'page-results' } );
+    $m->title_is('Found 1 transaction');
+    $m->text_contains( q{Status changed from 'new' to 'open'}, 'Got status change txn' );
+}
+
+diag "Saved searches";
+{
+    $m->follow_link_ok( { text => 'New Search', url_regex => qr/Class=RT::Transaction/ }, 'Query builder' );
+    $m->form_name('BuildQuery');
+    $m->field( ValueOfTicketId => 10 );
+    $m->submit('AddClause');
+
+    $m->form_name('BuildQuery');
+    $m->field( SavedSearchName => 'test txn search' );
+    $m->click('SavedSearchSave');
+    $m->text_contains('Current search: test txn search');
+
+    my $form = $m->form_name('BuildQuery');
+    my $input = $form->find_input( 'SavedSearchLoad' );
+    # an empty search and the real saved search
+    is( scalar $input->possible_values, 2, '2 SavedSearchLoad options' );
+
+    my ($id) = ($input->possible_values)[1] =~ /(\d+)$/;
+    my $search = RT::SavedSearch->new(RT->SystemUser);
+    $search->Load($id);
+    is($search->Type, 'TicketTransaction', 'Saved search type');
+    is_deeply(
+        $search->Content,
+        {
+            'Format' => '\'<b><a href="__WebPath__/Transaction/Display.html?id=__id__">__id__</a></b>/TITLE:ID\',
+\'<b><a href="__WebPath__/Ticket/Display.html?id=__ObjectId__">__ObjectId__</a></b>/TITLE:Ticket\',
+\'__Description__\',
+\'<small>__OldValue__</small>\',
+\'<small>__NewValue__</small>\',
+\'<small>__Content__</small>\',
+\'<small>__CreatedRelative__</small>\'',
+            'OrderBy'     => 'id|||',
+            'RowsPerPage' => '50',
+            'Order'       => 'ASC|ASC|ASC|ASC',
+            'Query'       => 'TicketId < 10',
+            'ObjectType'  => 'RT::Ticket'
+        },
+        'Saved search content'
+    );
+}
+
+diag "TicketStatus in Format";
+{
+    # TicketStatus is supported in the query but should also work in Format
+    $m->get_ok(
+        "/Search/Results.html?Class=RT::Transactions"
+            . "&Query=TicketId=" . $ticket->id . "+AND+Type='Create'"
+            . "&Format='__id__','__TicketSubject__','__TicketStatus__'"
+    );
+    $m->title_is('Found 1 transaction');
+    $m->text_contains('Test ticket', 'TicketSubject is displayed');
+    $m->text_contains('open', 'TicketStatus is displayed');
+}
+
+done_testing;

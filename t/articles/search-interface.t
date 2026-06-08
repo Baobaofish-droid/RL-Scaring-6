@@ -1,0 +1,313 @@
+
+use strict;
+use warnings;
+
+use RT::Test tests => undef, config => 'Set($SelfServiceShowArticleSearch, 1);';
+
+use RT::CustomField;
+use RT::Queue;
+use RT::Ticket;
+use_ok 'RT::Class';
+use_ok 'RT::Topic';
+use_ok 'RT::Article';
+
+my ($url, $m) = RT::Test->started_ok;
+
+# Variables to test return values
+my ($ret, $msg);
+
+# Create two classes
+my $class = RT::Class->new($RT::SystemUser);
+($ret, $msg) = $class->Create('Name' => 'First-class',
+                              'Description' => 'A general-purpose test class');
+ok($ret, "Test class created");
+
+($ret, $msg) = $class->Create('Name' => 'Second-class',
+                              'Description' => 'Another class');
+ok($ret, "Test class created");
+
+my $questionCF = RT::CustomField->new($RT::SystemUser);
+my $answerCF = RT::CustomField->new($RT::SystemUser);
+my $ticketCF = RT::CustomField->new($RT::SystemUser);
+($ret, $msg) = $questionCF->Create('Name' => 'Question-'.$$,
+                           'Type' => 'Text',
+                           'MaxValues' => 1,
+                           'LookupType' => 'RT::Class-RT::Article',
+                           'Description' => 'The question to be answered',
+                           'Disabled' => 0);
+ok($ret, "Question CF created: $msg");
+($ret, $msg) = $answerCF->Create('Name' => 'Answer-'.$$,
+                         'Type' => 'Text',
+                         'MaxValues' => 1,
+                         'LookupType' => 'RT::Class-RT::Article',
+                         'Description' => 'The answer to the question',
+                         'Disabled' => 0);
+ok($ret, "Answer CF created: $msg");
+
+($ret, $msg) = $ticketCF->Create('Name' => 'Class',
+                         'Type' => 'Text',
+                         'MaxValues' => 1,
+                         'LookupType' => 'RT::Queue-RT::Ticket',
+                         'Disabled' => 0);
+ok($ret, "Ticket CF 'Class' created: $msg");
+
+# Attach the custom fields to our class
+($ret, $msg) = $questionCF->AddToObject($class);
+ok($ret, "Question CF added to class: $msg");
+($ret, $msg) = $answerCF->AddToObject($class);
+ok($ret, "Answer CF added to class: $msg");
+my ($qid, $aid) = ($questionCF->Id, $answerCF->Id);
+
+my $global_queue = RT::Queue->new($RT::SystemUser);
+($ret, $msg) = $ticketCF->AddToObject($global_queue);
+ok($ret, "Ticket CF added globally: $msg");
+
+my %cvals = ('article1q' => 'Some question about swallows',
+                'article1a' => 'Some answer about Europe and Africa',
+                'article2q' => 'Another question about Monty Python',
+                'article2a' => 'Romani ite domum',
+                'article3q' => 'Why should I eat my supper?',
+                'article3a' => 'There are starving children in Africa',
+                'article4q' => 'What did Brian originally write?',
+                'article4a' => 'This is an answer that is longer than 255 '
+             . 'characters so these tests will be sure to use the LargeContent '
+             . 'SQL as well as the normal SQL that would be generated if this '
+             . 'was an answer that was shorter than 255 characters. This second '
+             . 'sentence has a few extra characters to get this string to go '
+             . 'over the 255 character boundary. Lorem ipsum.');
+
+# Create an article or two with our custom field values.
+
+my $article1 = RT::Article->new($RT::SystemUser);
+my $article2 = RT::Article->new($RT::SystemUser);
+my $article3 = RT::Article->new($RT::SystemUser);
+my $article4 = RT::Article->new($RT::SystemUser);
+($ret, $msg) = $article1->Create(Name => 'First article '.$$,
+                                 Summary => 'blah blah 1',
+                                 Class => $class->Id,
+                                 "CustomField-$qid" => $cvals{'article1q'},
+                                 "CustomField-$aid" => $cvals{'article1a'},
+                                 );
+ok($ret, "article 1 created");
+($ret, $msg) = $article2->Create(Name => 'Second article '.$$,
+                                 Summary => 'foo bar 2',
+                                 Class => $class->Id,
+                                 "CustomField-$qid" => $cvals{'article2q'},
+                                 "CustomField-$aid" => $cvals{'article2a'},
+                                 );
+ok($ret, "article 2 created");
+($ret, $msg) = $article3->Create(Name => 'Third article '.$$,
+                                 Summary => 'ping pong 3',
+                                 Class => $class->Id,
+                                 "CustomField-$qid" => $cvals{'article3q'},
+                                 "CustomField-$aid" => $cvals{'article3a'},
+                                 );
+ok($ret, "article 3 created");
+($ret, $msg) = $article4->Create(Name => 'Fourth article '.$$,
+                                 Summary => 'hoi polloi 4',
+                                 Class => $class->Id,
+                                 "CustomField-$qid" => $cvals{'article4q'},
+                                 "CustomField-$aid" => $cvals{'article4a'},
+                                 );
+ok($ret, "article 4 created");
+
+isa_ok($m, 'Test::WWW::Mechanize');
+ok($m->login, 'logged in');
+$m->follow_link_ok( { text => 'Articles', url_regex => qr!^/Articles/! },
+    'UI -> Articles' );
+
+# In all of the search results below, the results page should
+# have the summary text of the article it occurs in.
+
+# Case sensitive search on small field.
+DoArticleSearch($m, $class->Name, 'Africa');
+$m->text_contains('Last Updated'); # Did we do a search?
+$m->text_contains('blah blah 1');
+
+# Case insensitive search on small field.
+DoArticleSearch($m, $class->Name, 'africa');
+$m->text_contains('Last Updated'); # Did we do a search?
+$m->text_contains('blah blah 1');
+
+# Case sensitive search on large field.
+DoArticleSearch($m, $class->Name, 'ipsum');
+$m->text_contains('Last Updated'); # Did we do a search?
+$m->text_contains('hoi polloi 4');
+
+# Case insensitive search on large field.
+DoArticleSearch($m, $class->Name, 'lorem');
+TODO:{
+    local $TODO = 'Case insensitive search on LONGBLOB not available in MySQL'
+      if RT->Config->Get('DatabaseType') eq 'mysql';
+    $m->text_contains('Last Updated'); # Did we do a search?
+    $m->text_contains('hoi polloi 4');
+}
+
+diag "Testing saved searches";
+
+$m->submit_form_ok(
+    {
+        form_number => 3,
+        fields      => { NewSearchName => 'test', 'Article~' => 'africa' },
+        button      => 'Save',
+    },
+    'Create new saved search'
+);
+$m->text_contains( 'Created search test', 'Created new search test' );
+$m->text_contains('Last Updated');    # Did we do a search?
+$m->text_contains('blah blah 1');
+
+my $form = $m->form_number(3);
+is( $form->value('Article~'), 'africa', 'Search param is saved' );
+
+$m->submit_form_ok(
+    {
+        fields => { 'Article~' => 'ipsum' },
+        button => 'Update',
+    },
+    'Update saved search'
+);
+$m->text_contains( 'Search test updated', 'Updated saved search' );
+$m->text_contains('Last Updated');    # Did we do a search?
+$m->text_contains('hoi polloi 4');
+$m->text_lacks('blah blah 1');
+
+$m->submit_form_ok(
+    {
+        form_number => 3,
+        fields      => { NewSearchName => 'test2', 'Article~' => 'africa' },
+        button      => 'Save',                                                 # the "Save new" button
+    },
+    'Save as a new saved search'
+);
+$m->text_contains( 'Created search test2', 'Created a new search' );
+$m->text_contains('Last Updated');    # Did we do a search?
+$m->text_contains('blah blah 1');
+$m->text_lacks('hoi polloi 4');
+
+$form = $m->form_number(3);
+my $load_saved_search = $form->find_input('LoadSavedSearch');
+my @saved_searches    = $load_saved_search->possible_values;
+is( scalar @saved_searches, 3, '2 saved searches in total' );    # another is the empty option
+
+$m->submit_form_ok(
+    {
+        fields => { LoadSavedSearch => $saved_searches[1] },
+        button => 'Load',
+    },
+    'Load saved search'
+);
+$form = $m->form_number(3);
+is( $form->value('Article~'),        'ipsum',            'Search param from saved search' );
+is( $form->value('LoadSavedSearch'), $saved_searches[1], 'Loaded saved search' );
+$m->text_contains('Last Updated');                               # Did we do a search?
+$m->text_contains('hoi polloi 4');
+$m->text_lacks('blah blah 1');
+
+$m->submit_form_ok( { button => 'Delete', }, 'Delete saved search' );
+is_deeply(
+    [ $m->form_number(3)->find_input('LoadSavedSearch')->possible_values ],
+    [ @saved_searches[ 0, 2 ] ],
+    'Deleted saved search'
+);
+
+diag 'menu search';
+$m->submit_form_ok(
+    {
+        form_number => 1,
+        fields  => { q => 'article' },
+    },
+    'search article from menu'
+);
+for my $id ( 1 .. 4 ) {
+    $m->follow_link_ok( { text => $id, url_regex => qr!/Articles/Article/Display\.html! } );
+    $m->text_contains("article $$");
+    $m->back;
+}
+
+$m->submit_form_ok(
+    {
+        form_number => 1,
+        fields  => { q => 'article-not-exist' },
+    },
+    'search article from menu'
+);
+$m->text_contains('No articles matching search criteria found.');
+
+$m->submit_form_ok(
+    {
+        form_number => 1,
+        fields    => { q => 2 },
+    },
+    'search article id from menu'
+);
+is( $m->uri, $url . '/Articles/Article/Display.html?id=2', 'redirect to article display page' );
+
+diag 'selfservice menu search';
+
+my $alice = RT::Test->load_or_create_user(
+    Name         => 'alice',
+    Password     => 'password',
+    EmailAddress => 'alice@example.com',
+    Privileged   => 0,
+);
+ok( $alice && $alice->id, 'loaded or created user' );
+ok( !$alice->Privileged,   'user is not privileged' );
+
+ok( RT::Test->add_rights( { Principal => 'Unprivileged', Right => [qw(ShowArticle)] } ) );
+ok( $m->login( 'alice', 'password', logout => 1 ), 'logged in as an unprivileged user' );
+$m->submit_form_ok(
+    {
+        form_id => 'ArticleSearch',
+        fields  => { q => 'article' },
+    },
+    'search article from selfservice menu'
+);
+
+for my $id ( 1 .. 4 ) {
+    $m->follow_link_ok( { text => $id, url_regex => qr!/SelfService/Article/Display\.html! } );
+    $m->text_contains("article $$");
+    $m->back;
+}
+
+$m->submit_form_ok(
+    {
+        form_id => 'ArticleSearch',
+        fields  => { q => 'article-not-exist' },
+    },
+    'search article from selfservice menu'
+);
+$m->text_contains('No articles match article-not-exist');
+
+$m->submit_form_ok(
+    {
+        form_id => 'ArticleSearch',
+        fields    => { q => 2 },
+    },
+    'search article id from selfservice menu'
+);
+is( $m->uri, $url . '/SelfService/Article/Display.html?id=2', 'redirect to article display page' );
+
+done_testing;
+
+# When you send $m to this sub, it must be on a page with
+# a Search link.
+sub DoArticleSearch{
+  my $m = shift;
+  my $class_name = shift;
+  my $search_text = shift;
+
+  $m->follow_link_ok( {text => 'Articles'}, 'Articles Search');
+  $m->follow_link_ok( {text => $class_name}, 'Articles in class '. $class_name);
+  $m->text_contains('First article');
+
+  $m->submit_form_ok( {
+            form_number => 3,
+            fields      => {
+                'Article~' => $search_text
+            },
+        }, "Search for $search_text"
+    );
+  return;
+}
+

@@ -1,0 +1,234 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<div class="modal-header">
+  <h5 class="modal-title"><&|/l&>Filter Results</&></h5>
+  <a href="javascript:void(0)" class="close" data-bs-dismiss="modal" aria-label="Close" onclick="resetSearchFilterForm(this.closest('form'))">
+    <span aria-hidden="true">&times;</span>
+  </a>
+</div>
+<div class="modal-body">
+% if ( $Attribute eq 'Subject' ) {
+  <&| /Elements/LabeledValue, Label => loc('Subject') &>
+    <input class="form-control" name="Subject" value="<% $filter->{Subject} // '' %>" />
+  </&>
+% } elsif ( $Attribute eq 'Description' ) {
+  <&| /Elements/LabeledValue, Label => loc('Description') &>
+    <input class="form-control" name="Description" value="<% $filter->{Description} // '' %>" />
+  </&>
+% } elsif ( $Attribute eq 'Status' ) {
+  <&| /Elements/LabeledValue, Label => loc('Status') &>
+    <ul class="list-group list-group-compact">
+%     for my $status ( sort { lc $a cmp lc $b } keys %$status  ) {
+      <li class="list-group-item">
+        <div class="form-check">
+          <input type="checkbox" id="Status-<% $status %>" name="Status" class="form-check-input" value="<% $status %>" <% $filter->{Status}{$status} ? 'checked="checked"' : '' |n %> />
+          <label class="form-check-label" for="Status-<% $status %>"><% $status %></label>
+        </div>
+      </li>
+%     }
+    </ul>
+  </&>
+% } elsif ( $Attribute eq 'Queue' ) {
+  <&| /Elements/LabeledValue, Label => loc('Queue') &>
+    <ul class="list-group list-group-compact">
+%       for my $queue ( sort { lc $a->Name cmp lc $b->Name } @$queues ) {
+      <li class="list-group-item">
+        <div class="form-check">
+          <input type="checkbox" id="Queue-<% $queue->Id %>" name="Queue" class="form-check-input" value="<% $queue->Id %>" <% $filter->{Queue}{$queue->Id} ? 'checked="checked"' : '' |n %> />
+          <label class="form-check-label" for="Queue-<% $queue->Id %>"><% $queue->Name %></label>
+        </div>
+      </li>
+%       }
+    </ul>
+  </&>
+% } elsif ( $Attribute eq 'Owner' ) {
+  <&| /Elements/LabeledValue, Label => loc('Owner') &>
+    <& /Elements/SelectOwner, Name => 'Owner', ValueAttribute => 'Name', Default => $filter->{Owner}, Size => 6, Queues => { map { $_->Id => 1 } @$queues } &>
+  </&>
+% } elsif ( $Attribute eq 'SLA' ) {
+  <&| /Elements/LabeledValue, Label => loc('SLA') &>
+    <ul class="list-group list-group-compact">
+%       for my $sla ( sort( keys %{RT->Config->Get('ServiceAgreements')->{'Levels'}} ), 'NULL'  ) {
+      <li class="list-group-item">
+        <div class="form-check">
+          <input type="checkbox" class="form-check-input checkbox" id="SLA_<% $sla %>" name="SLA" value="<% $sla %>" <% $filter->{SLA}{$sla} ? 'checked="checked"' : '' |n %> />
+            <label class="form-check-label" for="SLA_<% $sla %>"><% $sla eq 'NULL' ? loc('(no value)') : $sla %></label>
+        </div>
+      </li>
+%       }
+    </ul>
+  </&>
+% } elsif ( $Attribute =~ /^(?:Creator|LastUpdatedBy)$/) {
+  <&| /Elements/LabeledValue, Label => loc(join ' ', split /(?=[A-Z])/, $Attribute) &>
+    <input class="form-control" data-autocomplete="Users" name="<% $Attribute %>" value="<% $filter->{$Attribute} %>" data-autocomplete-return="Name" />
+  </&>
+% } elsif ( $Attribute eq 'Type' ) {
+  <&| /Elements/LabeledValue, Label => loc('Type') &>
+    <ul class="list-group list-group-compact">
+%     for my $type ( qw/approval reminder ticket/ ) {
+      <li class="list-group-item">
+        <div class="form-check">
+          <input type="checkbox" id="Type-<% $type %>" name="Type" class="form-check-input" value="<% $type %>" <% $filter->{Type}{$type} ? 'checked="checked"' : '' |n %> />
+          <label class="form-check-label" for="Type-<% $type %>"><% $type %></label>
+        </div>
+      </li>
+%     }
+    </ul>
+  </&>
+% } elsif ( $Attribute =~ /(?:Initial|Final)?Priority/ ) {
+  <&| /Elements/LabeledValue, Label => loc('[_1] equal to', join ' ', split /(?=[A-Z])/, $Attribute) &>
+    <& /Elements/SelectPriority, Name => "${Attribute}EqualTo", Default => $filter->{$Attribute}{'='}, Queues => { map { $_->Id => 1 } @$queues }, ValueAsString => 1, ShowEmptyOption => 1 &>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('[_1] greater than', join ' ', split /(?=[A-Z])/, $Attribute) &>
+    <& /Elements/SelectPriority, Name => "${Attribute}GreaterThan", Default => $filter->{$Attribute}{'>'}, Queues => { map { $_->Id => 1 } @$queues }, ValueAsString => 1, ShowEmptyOption => 1 &>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('[_1] less than', join ' ', split /(?=[A-Z])/, $Attribute) &>
+    <& /Elements/SelectPriority, Name => "${Attribute}LessThan", Default => $filter->{$Attribute}{'<'}, Queues => { map { $_->Id => 1 } @$queues }, ValueAsString => 1, ShowEmptyOption => 1 &>
+  </&>
+% } elsif ( $Attribute eq 'id' ) {
+  <&| /Elements/LabeledValue, Label => loc('[_1] equal to', $Attribute) &>
+    <input type="text" class="form-control" name="<% $Attribute %>EqualTo" size="5" value="<% $filter->{$Attribute}{'='} %>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('[_1] greater than', $Attribute) &>
+    <input type="text" class="form-control" name="<% $Attribute %>GreaterThan" size="5" value="<% $filter->{$Attribute}{'>'} %>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('[_1] less than', $Attribute) &>
+    <input type="text" class="form-control" name="<% $Attribute %>LessThan" size="5" value="<% $filter->{$Attribute}{'<'} %>" />
+  </&>
+% } elsif ( $Attribute =~ /^(?:Told|Starts|Started|Due|Resolved|Created|LastUpdated)/ ) {
+  <&| /Elements/LabeledValue, Label => loc('[_1] equal to', join ' ', split /(?=[A-Z])/, $Attribute) &>
+    <& /Elements/SelectDate, Name => "${Attribute}EqualTo", Default => $filter->{$Attribute}{'='} || '', ShowTime => 0 &>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('[_1] greater than', join ' ', split /(?=[A-Z])/, $Attribute) &>
+    <& /Elements/SelectDate, Name => "${Attribute}GreaterThan", Default => $filter->{$Attribute}{'>'} || '', ShowTime => 0 &>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('[_1] less than', join ' ', split /(?=[A-Z])/, $Attribute) &>
+    <& /Elements/SelectDate, Name => "${Attribute}LessThan", Default => $filter->{$Attribute}{'<'} || '', ShowTime => 0 &>
+  </&>
+% } elsif ( $Attribute =~ /^Time/ ) {
+  <&| /Elements/LabeledValue, Label => loc('[_1] equal to', join ' ', split /(?=[A-Z])/, $Attribute) &>
+    <div class="d-inline-block">
+      <input type="text" class="form-control" name="<% $Attribute %>EqualTo" size="5" value="<% $filter->{$Attribute}{'='} %>" />
+    </div>
+    <&|/l&>Minutes</&>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('[_1] greater than', join ' ', split /(?=[A-Z])/, $Attribute) &>
+    <div class="d-inline-block">
+      <input type="text" class="form-control" name="<% $Attribute %>GreaterThan" size="5" value="<% $filter->{$Attribute}{'>'} %>" />
+    </div>
+    <&|/l&>Minutes</&>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('[_1] less than', join ' ', split /(?=[A-Z])/, $Attribute) &>
+    <div class="d-inline-block">
+      <input type="text" class="form-control" name="<% $Attribute %>LessThan" size="5" value="<% $filter->{$Attribute}{'<'} %>" />
+    </div>
+    <&|/l&>Minutes</&>
+  </&>
+% } elsif ( $Attribute =~ /^(Requestor|Cc|AdminCc)s?$/) {
+%   my $name = $1;
+  <&| /Elements/LabeledValue, Label => loc($name) &>
+    <input class="form-control" data-autocomplete="Users" name="<% $name %>" value="<% $filter->{$name} %>" />
+  </&>
+% } elsif ( $Attribute =~ /^CustomRole\.\{(.+)\}$/) {
+%   my $name = $1;
+  <&| /Elements/LabeledValue, Label => $name &>
+    <input class="form-control" data-autocomplete="Users" name="<% $Attribute %>" value="<% $filter->{$Attribute} %>" />
+  </&>
+% } elsif ( $Attribute =~ /^CustomField\.\{(.+)\}$/) {
+%   my $name = $1;
+%   my $cf = RT::CustomField->new($session{CurrentUser});
+%   $cf->Load($name);
+  <&| /Elements/LabeledValue, Label => $name &>
+%   if ( $cf->Type eq 'Select' ) {
+%   my $cfvs = $cf->Values;
+    <ul class="list-group list-group-compact">
+%      while ( my $cfv = $cfvs->Next ) {
+      <li class="list-group-item">
+        <div class="form-check">
+          <input type="checkbox" class="form-check-input checkbox" id="<% $name . '_' . $cfv->Name %>" name="<% $Attribute %>" value="<% $cfv->Name %>" <% $filter->{$Attribute}{$cfv->Name} ? 'checked="checked"' : '' |n %> />
+          <label class="form-check-label" for="<% $name . '_' . $cfv->Name %>"><% $cfv->Name %></label>
+        </div>
+      </li>
+%      }
+    </ul>
+%   } else {
+    <input type="text" class="form-control" name="<% $Attribute %>" size="5" value="<% $filter->{$Attribute} %>" />
+%   }
+  </&>
+% }
+
+</div>
+<div class="modal-footer">
+  <div class="row mt-2 justify-content-end">
+    <div class="col-auto">
+      <input type="button" class="btn btn-primary" data-bs-dismiss="modal" onclick="resetSearchFilterForm(this.closest('form'))" value="<% loc('Cancel') %>" />
+    </div>
+    <div class="col-auto">
+      <input type="submit" class="btn btn-primary" name="Apply" value="<% loc('Apply') %>" data-bs-dismiss="modal" />
+    </div>
+  </div>
+</div>
+
+<%INIT>
+
+my %filter_data;
+if ( $Query && $BaseQuery ) {
+    %filter_data = %{ ProcessQueryForFilters( Class => 'RT::Tickets', Query => $Query, BaseQuery => $BaseQuery ) };
+}
+
+my $status = $filter_data{status};
+my $queues = $filter_data{queues};
+my $filter = $filter_data{filter};
+
+</%INIT>
+
+<%ARGS>
+$Attribute => ''
+$Query => ''
+$BaseQuery => $Query
+</%ARGS>

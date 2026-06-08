@@ -1,0 +1,447 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Admin/Elements/Header, Title => $title  &>
+<& /Elements/Tabs &>
+
+<& /Elements/ListActions, actions => \@results &>
+
+<form action="<%RT->Config->Get('WebPath')%>/Admin/Users/Modify.html" method="post" enctype="multipart/form-data" name="<% $Create ? 'UserCreate': 'UserModify' %>">
+%if ($Create) {
+<input type="hidden" class="hidden" name="id" value="new" />
+% } else {
+<input type="hidden" class="hidden" name="id" value="<%$UserObj->Id%>" />
+% }
+<div class="row">
+  <div class="boxcontainer col-xl-6">
+
+<&| /Widgets/TitleBox, title => loc('Identity'), class => 'user-info-identity' &>
+  <&| /Elements/LabeledValue, Label => loc("Username") &>
+    <input type="text" class="form-control" name="Name" value="<%$UserObj->Name//$ARGS{Name}//''%>" /> <strong><&|/l&>(required)</&></strong>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Email") &>
+    <input type="email" class="form-control" name="EmailAddress" value="<%$UserObj->EmailAddress//$ARGS{EmailAddress}//''%>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Real Name") &>
+    <input type="text" class="form-control" name="RealName" value="<%$UserObj->RealName//$ARGS{RealName}//''%>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Nickname") &>
+    <input type="text" class="form-control" name="NickName" value="<%$UserObj->NickName//$ARGS{NickName}//''%>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Unix login") &>
+      <input type="text" class="form-control" name="Gecos" value="<%$UserObj->Gecos//$ARGS{Gecos}//''%>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Language") &>
+      <& /Elements/SelectLang, Name => 'Lang', Default => $UserObj->Lang//$ARGS{Lang} &>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Timezone") &>
+      <& /Elements/SelectTimezone, Name => 'Timezone', Default => $UserObj->Timezone &>
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Extra info") &>
+      <textarea class="form-control" name="FreeformContactInfo" cols="20" rows="5"><%$UserObj->FreeformContactInfo//$ARGS{FreeformContactInfo}//''%></textarea>
+  </&>
+
+<& /Elements/EditCustomFields, Object => $UserObj, Grouping => 'Identity' &>
+</&>
+
+<&| /Widgets/TitleBox, title => loc('Access control'), class => 'user-info-access-control' &>
+<input type="hidden" class="hidden" name="SetEnabled" value="1" />
+  <div class="row mt-2">
+    <div class="col-12">
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input checkbox" id="Enabled" name="Enabled" value="1" <% ($UserObj->Id && $UserObj->Disabled) ? '' : 'checked="checked"' |n%> />
+        <label class="form-check-label" for="Enabled"><&|/l&>Let this user access RT</&></label>
+      </div>
+    </div>
+  </div>
+
+% my $PrivilegedChecked = ((!$Create && $UserObj->Privileged()) or (!$UserObj->Id and $ARGS{Privileged})) ? 'checked="checked"' : '';
+<input type="hidden" class="hidden" name="SetPrivileged" value="1" />
+  <div class="row mt-2">
+    <div class="col-12">
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input checkbox" id="Privileged" name="Privileged" value="1" <%$PrivilegedChecked|n%> />
+        <label class="form-check-label" for="Privileged"><&|/l&>Let this user be granted rights</&>(<&|/l&>Privileged</&>)</label>
+      </div>
+    </div>
+  </div>
+
+<& /Elements/EditPassword,
+    User => $UserObj,
+    Name => [qw(CurrentPass Pass1 Pass2)],
+&>
+
+<& /Elements/EditCustomFields, Object => $UserObj, Grouping => 'Access control' &>
+
+</&>
+
+<&| /Widgets/TitleBox, title => loc('Comments about this user'), class => 'user-info-comments' &>
+<div class="row mt-2">
+  <div class="col-12">
+    <textarea class="comments form-control" name="Comments" cols="80" rows="5" wrap="virtual"><%$UserObj->Comments//$ARGS{Comments}//''%></textarea>
+  </div>
+</div>
+</&>
+
+%if (!$Create && $UserObj->Privileged) {
+%   my $sig = $UserObj->Signature//$ARGS{Signature}//'';
+%   my $richtext = '';
+<&| /Widgets/TitleBox, title => loc('Signature'), class => 'user-info-signature' &>
+<div class="row mt-2">
+  <div class="col-12">
+%   if (RT->Config->Get('MessageBoxRichText', $UserObj )) {
+%       # allow for a smooth transition from a plain text signature, with or without HTML content, to an HTML signature
+        <input type="text" style="display:none" name="SignatureType" id="SignatureType" value="<%$sig =~ /<.{1,5}>/ ? "text/html" : 'text/plain'%>"/>
+%       $richtext = ' richtext';
+%   }
+    <textarea class="signature form-control<%$richtext%>" rows="5" name="Signature" wrap="hard"><%$sig%></textarea>
+  </div>
+</div>
+</&>
+% }
+
+% $m->callback( %ARGS, CallbackName => 'LeftColumnBottom', UserObj => $UserObj );
+
+  </div>  <!-- boxcontainer -->
+  <div class="boxcontainer col-xl-6">
+    <&| /Widgets/TitleBox, title => loc('Picture'), id => "user-prefs-image" &>
+      <div><p><&|/l, sprintf '%.1fMB', RT->Config->Get('MaxUserImageSize') / 1024**2 &>Upload an image file (under [_1]) to set as your profile picture. For the best display, use an image with the same height and width.</&></p></div>
+%     if ( $UserObj->Image ) {
+        <div class="row justify-content-center">
+          <div class="col-auto">
+              <& /Elements/ShowUserImage, User => $UserObj, Class => 'rt-user-image-lg' &>
+          </div>
+        </div>
+%     }
+        <div class="row">
+          <div class="col">
+            <&| /Elements/LabeledValue,
+                  Label => loc('Upload a picture'),
+            &>
+              <input type="file" class="form-control" name="UserImage" accept="image/*">
+            </&>
+          </div>
+        </div>
+%     if ( $UserObj->Image ) {
+        <div class="row mt-2">
+          <div class="col text-end">
+            <a href="?id=<% $UserObj->Id %>&DeleteImage=1" class="btn btn-primary"><% loc('Delete Image') %></a>
+          </div>
+        </div>
+%     }
+%     $m->callback( %ARGS, UserObj => $UserObj, CallbackName => 'ImageEnd' );
+    </&>
+<&| /Widgets/TitleBox, title => loc('Location'), class => 'user-info-location' &>
+  <&| /Elements/LabeledValue, Label => loc("Organization") &>
+    <input type="text" class="form-control" name="Organization" value="<%$UserObj->Organization//$ARGS{Organization}//''%>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Address1") &>
+    <input type="text" class="form-control" name="Address1" value="<%$UserObj->Address1//$ARGS{Address1}//''%>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Address2") &>
+      <input type="text" class="form-control" name="Address2" value="<%$UserObj->Address2//$ARGS{Address2}//''%>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("City") &>
+    <input type="text" class="form-control" name="City" value="<%$UserObj->City//$ARGS{City}//''%>" size="14" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("State") &>
+    <input type="text" class="form-control" name="State" value="<%$UserObj->State//$ARGS{State}//''%>" size="3" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Zip") &>
+    <input type="text" class="form-control" name="Zip" value="<%$UserObj->Zip//$ARGS{Zip}//''%>" size="9" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc("Country") &>
+
+    <input type="text" class="form-control" name="Country" value="<%$UserObj->Country//$ARGS{Country}//''%>" />
+  </&>
+  <& /Elements/EditCustomFields, Object => $UserObj, Grouping => 'Location' &>
+</&>
+
+<&| /Widgets/TitleBox, title => loc('Phone numbers'), class => 'user-info-phones' &>
+  <&| /Elements/LabeledValue, Label => loc("Residence") &>
+      <input type="tel" class="form-control" name="HomePhone" value="<%$UserObj->HomePhone//$ARGS{HomePhone}//''%>" size="13" />
+    </&>
+    <&| /Elements/LabeledValue, Label => loc("Work") &>
+      <input type="tel" class="form-control" name="WorkPhone" value="<%$UserObj->WorkPhone//$ARGS{WorkPhone}//''%>" size="13" />
+    </&>
+    <&| /Elements/LabeledValue, Label => loc("Mobile") &>
+      <input type="tel" class="form-control" name="MobilePhone" value="<%$UserObj->MobilePhone//$ARGS{MobilePhone}//''%>" size="13" />
+    </&>
+  <&| /Elements/LabeledValue, Label => loc("Pager") &>
+    <input type="tel" class="form-control" name="PagerPhone" value="<%$UserObj->PagerPhone//$ARGS{PagerPhone}//''%>" size="13" />
+    </&>
+<& /Elements/EditCustomFields, Object => $UserObj, Grouping => 'Phones' &>
+
+</&>
+
+<& /Elements/EditCustomFieldCustomGroupings, Object => $UserObj &>
+
+% unless ( $Create ) {
+<& /User/Elements/RelatedData, UserObj => $UserObj &>
+% }
+
+% $m->callback( %ARGS, CallbackName => 'RightColumnBottom', UserObj => $UserObj );
+
+  </div> <!-- boxcontainer -->
+</div>   <!-- row -->
+
+<& /Elements/Submit, Label => ($Create ? loc('Create') : loc('Save Changes')), FullWidth => 1 &>
+
+</form>
+
+% if ( $UserObj->Id ) {
+<div id="user-info-modal" class="modal">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content p-2">
+      <div class="modal-header">
+        <h5 class="modal-title"><&|/l&>Anonymize User</&></h5>
+        <a class="close" data-bs-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+        </a>
+      </div>
+      <div class="modal-body">
+        <form id="user-info-modal-form" action="<% RT->Config->Get('WebPath') %>/Admin/Users/Modify.html" method="POST">
+          <input type="hidden" name="id" value="<% $UserObj->Id %>" />
+          <input type="hidden" name="Anonymize" value="1" />
+
+          <div class="row mt-2">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="clear_customfields" name="clear_customfields" />
+              <label class="form-check-label" for="clear_customfields"><&|/l&>Check to clear user custom fields</&></label>
+            </div>
+          </div>
+
+          <div class="row mt-2 justify-content-end">
+            <div class="col-auto">
+              <button type="Submit" data-bs-dismiss="modal" class="btn-primary btn"><&|/l&>Anonymize</&></button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+% }
+<%INIT>
+
+my $UserObj = RT::User->new($session{'CurrentUser'});
+my ($title, @results);
+my $skip_update = 0;
+
+my ($val, $msg);
+
+if ( ($id && $id ne 'new') || ( $ARGS{Name} && not $id ) ) {
+    if ( $id ) {
+        ( $val, $msg ) = $UserObj->Load($id);
+    }
+    else {
+        ( $val, $msg ) = $UserObj->Load($ARGS{Name});
+    }
+    if ( not $val ) {
+        RT->Logger->error("Unable to load user with id $id: $msg");
+        Abort(loc("Couldn't load user '[_1]'", ( $ARGS{Name} || '')));
+    }
+}
+
+# Handle case when Modify is called with no params
+if ( not $UserObj->Id
+     and not $Create
+     and $id ne 'new' ) {
+    Abort(loc("Couldn't load user '[_1]'", ( $ARGS{Name} || '')));
+}
+
+my $CustomFields = $UserObj->CustomFields;
+
+my ($status, @msg) = $m->comp(
+    '/Elements/ValidateCustomFields',
+    Object       => $UserObj,
+    CustomFields => $CustomFields,
+    ARGSRef      => \%ARGS,
+);
+unless ($status) {
+    push @results, @msg;
+    $skip_update = 1;
+    if ( $id && $id eq 'new' ) {
+        $Create = 1;
+    }
+}
+
+$ARGS{Privileged} = $ARGS{Privileged} ? 1 : 0;
+delete $ARGS{Privileged} unless $ARGS{SetPrivileged};
+
+$ARGS{Disabled} = $ARGS{Enabled} ? 0 : 1;
+delete $ARGS{Disabled} unless $ARGS{SetEnabled};
+
+my @fields = qw(Name Comments Signature EmailAddress FreeformContactInfo
+                Organization RealName NickName Lang Gecos HomePhone WorkPhone
+                MobilePhone PagerPhone Address1 Address2 City State Zip Country
+                Timezone
+               );
+
+if ($Create) {
+    $title = loc("Create a new user");
+} elsif ( defined $id && $id eq 'new' && not $skip_update ) {
+    $m->callback( CallbackName => 'BeforeCreate', ARGSRef => \%ARGS, Fields => \@fields, Results => \@results );
+    ( $val, $msg ) = $UserObj->Create(
+        (map {($_ => $ARGS{$_})} @fields),
+        Privileged => $ARGS{'Privileged'},
+        Disabled   => $ARGS{'Disabled'},
+    );
+
+    if ($val) {
+        push @results, $msg;
+        _FilterUserCFValuesOnCreate( ARGSRef => \%ARGS, UserObj => $UserObj );
+        push @results, ProcessObjectCustomFieldUpdates( ARGSRef => \%ARGS, Object => $UserObj );
+
+        if ( $UserImage ) {
+            if ( my $file_hash = _UploadedFile('UserImage') ) {
+                if ( length $file_hash->{LargeContent} > RT->Config->Get('MaxUserImageSize') ) {
+                    push @results,
+                        loc( 'Image too large, max is [_1]',
+                            sprintf( '%.1fMB', RT->Config->Get('MaxUserImageSize') / 1024**2 ) );
+                }
+                else {
+                    my ( $status, $msg )
+                        = $UserObj->SetImageAndContentType( $file_hash->{LargeContent}, $file_hash->{ContentType} );
+                    push @results, $msg;
+                }
+            }
+        }
+        $title = loc("Modify the user [_1]", $UserObj->Name);
+    } else {
+        push @results, loc('User could not be created: [_1]', $msg);
+        $title = loc("Create a new user");
+        $Create = 1;
+    }
+}
+elsif ( $UserObj->Id && $DeleteImage ) {
+    my ( $status, $msg ) = $UserObj->SetImageAndContentType( '', '' );
+
+    if ($status) {
+        push @results, loc('Image deleted');
+    }
+    else {
+        push @results, loc('Error: Unable to delete image');
+        RT->Logger->error( 'Unable to delete image for user ' . $UserObj->Id . " $msg" );
+    }
+}
+elsif ( $UserObj->Id && not $skip_update ) {
+    $title = loc("Modify the user [_1]", $UserObj->Name);
+
+    $m->callback( %ARGS, CallbackName => 'BeforeUpdate', User => $UserObj, ARGSRef => \%ARGS, Results => \@results );
+
+    my @fieldresults = UpdateRecordObject ( AttributesRef => \@fields,
+                                            Object => $UserObj,
+                                            ARGSRef => \%ARGS );
+    push (@results,@fieldresults);
+    push @results, ProcessObjectCustomFieldUpdates( ARGSRef => \%ARGS, Object => $UserObj );
+
+    if ( defined $ARGS{Privileged} and $ARGS{Privileged} != ($UserObj->Privileged || 0) ) {
+        my ($code, $msg) = $UserObj->SetPrivileged($ARGS{Privileged});
+        push @results, loc('Privileged status: [_1]', loc_fuzzy($msg));
+    }
+
+    if ( defined $ARGS{Disabled} and $ARGS{Disabled} != $UserObj->Disabled ) {
+        my ($code, $msg) = $UserObj->SetDisabled($ARGS{Disabled});
+        push @results, $msg;
+    }
+
+    if ( $UserImage ) {
+        if ( my $file_hash = _UploadedFile('UserImage') ) {
+            if ( length $file_hash->{LargeContent} > RT->Config->Get('MaxUserImageSize') ) {
+                push @results,
+                    loc( 'Image too large, max is [_1]',
+                        sprintf( '%.1fMB', RT->Config->Get('MaxUserImageSize') / 1024**2 ) );
+            }
+            else {
+                my ( $status, $msg )
+                    = $UserObj->SetImageAndContentType( $file_hash->{LargeContent}, $file_hash->{ContentType} );
+                push @results, $msg;
+            }
+        }
+    }
+}
+
+if ( $ARGS{'Anonymize'} and $UserObj->Id && not $skip_update ) {
+    my ($ret, $msg) = $UserObj->AnonymizeUser(ClearCustomFields => $ARGS{'clear_customfields'});
+    push @results, $msg;
+}
+
+if ( $UserObj->Id && not $skip_update ) {
+    # Deal with Password field
+    my ($status, $msg) = $UserObj->SafeSetPassword(
+        Current      => $CurrentPass,
+        New          => $Pass1,
+        Confirmation => $Pass2,
+    );
+    push @results, $msg;
+
+    if ( $id eq 'new' && !$status ) {
+        push @results, loc("A password was not set, so user won't be able to login.");
+    }
+}
+
+# This code does automatic redirection if any updates happen.
+unless ( $skip_update ) {
+    MaybeRedirectForResults(
+        Actions   => \@results,
+        Arguments => { id => $UserObj->Id },
+    ) if $UserObj->Id;
+}
+
+</%INIT>
+
+
+<%ARGS>
+$id => undef
+$CurrentPass => undef
+$Pass1 => undef
+$Pass2 => undef
+$Create=> undef
+$UserImage => undef
+$DeleteImage => undef
+</%ARGS>

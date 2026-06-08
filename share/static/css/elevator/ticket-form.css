@@ -1,0 +1,11 @@
+.ticket-update-suggested-cc {
+    word-break: break-word;
+}
+
+.messagebox-container.action-response textarea.messagebox {
+    background-color: #fcc !important;
+}
+
+.messagebox-container.action-private textarea.messagebox {
+    background-color: #ffffdd !important;
+}

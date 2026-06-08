@@ -1,0 +1,308 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Elements/Header, Title => loc("Assets") &>
+<& /Elements/Tabs &>
+
+% $m->callback(CallbackName => 'BeforeActionList', ARGSRef => \%ARGS, Assets => $assets, Actions => \@results);
+
+<& /Elements/ListActions, actions => \@results &>
+
+<form method="post" action="<% RT->Config->Get('WebPath') %>/Asset/Search/Bulk.html" enctype="multipart/form-data" name="BulkUpdate" id="BulkUpdate">
+% use List::MoreUtils 'uniq';
+% foreach my $var ( uniq @{$search{'PassArguments'}}, qw(Query Format OrderBy Order Rows Page Token) )  {
+<input type="hidden" class="hidden" name="<% $var %>" value="<% $ARGS{$var} || '' %>" />
+% }
+<& /Elements/CollectionList,
+    %search,
+    Collection      => $assets,
+    AllowSorting    => 1,
+    DisplayFormat   => $DisplayFormat,
+    InlineEdit      => 0,
+    &>
+% if (not $assets->Count) {
+<em><&|/l&>No assets matching search criteria found.</&></em>
+% }
+
+
+  <& /Elements/Submit,
+    Name => 'Update',
+    Label => loc('Update'),
+    CheckboxNameRegex => '/^UpdateAsset(All)?$/',
+    CheckAll => 1, ClearAll => 1, FullWidth => 1
+  &>
+  <div class="submit">
+    <div class="row mt-2">
+      <div class="buttons col-12">
+        <span class="caption"></span>
+          <input type="submit" id="bulk-update-create-linked-ticket" name="CreateLinkedTicket"  value="Create Linked Ticket" class="btn btn-primary" alt="Create a ticket with checked assets linked" />
+      </div>
+    </div>
+  </div>
+
+
+  <&| /Widgets/TitleBox, title => loc("Basics"), class => "asset-basics asset-bulk-basics", title_class => "inverse" &>
+    <div class="row mt-2">
+      <div class="col-6">
+        <&| /Elements/LabeledValue, Label => loc('Catalog') &>
+          <& /Asset/Elements/SelectCatalog, Name => 'UpdateCatalog', UpdateSession => 0, ShowNullOption => 1 &>
+        </&>
+      </div>
+      <div class="col-6">
+        <&| /Elements/LabeledValue, Label => loc('Name') &>
+          <input class="form-control" type="text" name="UpdateName" value="<% $ARGS{'Name'}||'' %>" size="40">
+        </&>
+      </div>
+    </div>
+
+    <div class="row mt-2">
+      <div class="col-6 asset-catalog">
+        <&| /Elements/LabeledValue, Label => loc('Description') &>
+            <input class="form-control" type="text" name="UpdateDescription" value="<% $ARGS{'Description'}||'' %>" size="40">
+        </&>
+      </div>
+
+      <div class="col-6 asset-status">
+        <&| /Elements/LabeledValue, Label => loc('Status') &>
+          <& /Asset/Elements/SelectStatus, Name => 'UpdateStatus', DefaultValue => 1 &>
+        </&>
+      </div>
+    </div>
+% my $basic_cfs = $cfs->Clone;
+% $basic_cfs->LimitToGrouping( 'RT::Asset' => 'Basics');
+% if ( $basic_cfs->Count ) {
+    <& /Elements/BulkCustomFields, CustomFields => $basic_cfs, &>
+% }
+  </&>
+
+  <&| /Widgets/TitleBox, title => loc("People"), class => "asset-people asset-bulk-people", title_class => "inverse" &>
+% for my $rname ( $asset->Roles( ACLOnly => 0, Single => 1 ), map { $_->GroupType } @{ $single_roles->ItemsArrayRef } ) {
+% my $input = "SetRoleMember-$rname";
+    <div class="row mt-2">
+      <div class="col-6">
+        <&| /Elements/LabeledValue, Label => RT::Asset->new( $session{CurrentUser} )->LabelForRole($rname) &>
+          <input class="form-control" type="text" value="<% $ARGS{ $input } || '' %>" name="<% $input %>" id="<% $input %>" data-autocomplete="Users" data-autocomplete-return="Name"
+            data-autocomplete-include-nobody />
+        </&>
+      </div>
+    </div>
+% }
+
+% for my $rname ( $asset->Roles( ACLOnly => 0, Single => 0 ), map { $_->GroupType } @{ $multi_roles->ItemsArrayRef } ) {
+% my $input = "AddRoleMember-$rname";
+    <div class="row mt-2">
+      <div class="col-6">
+        <&| /Elements/LabeledValue, Label => loc("Add [_1]", RT::Asset->new( $session{CurrentUser} )->LabelForRole($rname)) &>
+          <input class="form-control" type="text" value="<% $ARGS{ $input } || '' %>" name="<% $input %>" id="<% $input %>" data-autocomplete="Users" data-autocomplete-return="Name" />
+        </&>
+      </div>
+
+% $input = "RemoveRoleMember-$rname";
+      <div class="col-6">
+        <&| /Elements/LabeledValue, Label => loc("Remove [_1]", RT::Asset->new( $session{CurrentUser} )->LabelForRole($rname)) &>
+            <input class="form-control" type="text" value="<% $ARGS{ $input } || '' %>" name="<% $input %>" id="<% $input %>" data-autocomplete="Users" data-autocomplete-return="Name" />
+
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="RemoveAllRoleMembers-<% $rname %>" name="RemoveAllRoleMembers-<% $rname %>" value="1"/>
+              <label class="form-check-label" for="RemoveAllRoleMembers-<% $rname %>"><em><&|/l&>(Check to delete all values)</&></em></label>
+            </div>
+        </&>
+      </div>
+    </div>
+% }
+% my $people_cfs = $cfs->Clone;
+% $people_cfs->LimitToGrouping( 'RT::Asset' => 'People');
+% if ( $people_cfs->Count ) {
+    <& /Elements/BulkCustomFields, CustomFields => $people_cfs, &>
+% }
+  </&>
+
+%   my $date_cfs = $cfs->Clone;
+%   $date_cfs->LimitToGrouping( 'RT::Asset' => 'Dates');
+%   if ( $date_cfs->Count ) {
+
+    <&| /Widgets/TitleBox, title => loc("Dates"), class => "asset-dates asset-bulk-dates", title_class => "inverse" &>
+      <& /Elements/BulkCustomFields, CustomFields => $date_cfs, &>
+    </&>
+%   }
+
+% for my $group ( RT::CustomField->CustomGroupings( 'RT::Asset' ), '' ) {
+%   my $group_cfs = $cfs->Clone;
+%   $group_cfs->LimitToGrouping( 'RT::Asset' => $group);
+%   if ( $group_cfs->Count ) {
+    <&| /Widgets/TitleBox, class=>'asset-bulk-grouping asset-info-cfs asset-bulk-cfs', title => loc('Edit [_1]', ($group? loc($group) : loc('Custom Fields')) ), title_class => "inverse" &>
+      <& /Elements/BulkCustomFields, CustomFields => $group_cfs, &>
+    </&>
+%   }
+% }
+
+  <&|/Widgets/TitleBox, title => loc('Edit Links'), class => "asset-links asset-bulk-links", title_class => "inverse" &>
+    <& /Elements/BulkLinks, Collection => $assets, %ARGS &>
+%   my $link_cfs = $cfs->Clone;
+%   $link_cfs->LimitToGrouping( 'RT::Asset' => 'Links');
+%   if ( $cfs->Count ) {
+      <& /Elements/BulkCustomFields, CustomFields => $link_cfs, &>
+%   }
+  </&>
+
+<& /Elements/Submit, Label => loc('Update'), Name => 'Update', FullWidth => 1 &>
+</form>
+
+<%INIT>
+my @results;
+$m->callback(ARGSRef => \%ARGS, Results => \@results, CallbackName => 'Initial');
+
+my $catalog_obj = LoadDefaultCatalog($ARGS{'Catalog'} || '');
+$ARGS{'Catalog'} = $catalog_obj->Id;
+
+my $assets = RT::Assets->new($session{CurrentUser});
+my %search;
+if ( $ARGS{Query} ) {
+    $assets->FromSQL($ARGS{Query});
+}
+else {
+    %search = ProcessAssetsSearchArguments(
+        Assets => $assets, Catalog => $catalog_obj, ARGSRef => \%ARGS,
+    );
+}
+$search{Format} ||= RT->Config->Get('AssetDefaultSearchResultFormat');
+
+my $DisplayFormat = "'__CheckBox.{UpdateAsset}__',". ($ARGS{Format} || $search{'Format'});
+$DisplayFormat =~ s/\s*,\s*('?__NEWLINE__'?)/,$1,''/gi;
+
+my $asset = RT::Asset->new( $session{'CurrentUser'} );
+
+delete $ARGS{$_} foreach grep { $ARGS{$_} =~ /^$/ } keys %ARGS;
+
+$DECODED_ARGS->{'UpdateAssetAll'} = 1 unless @UpdateAsset;
+
+my $cfs;
+my $single_roles = RT::CustomRoles->new( $session{CurrentUser} );
+my $multi_roles  = RT::CustomRoles->new( $session{CurrentUser} );
+
+if ( $ARGS{Query} ) {
+    $cfs = RT::CustomFields->new( $session{'CurrentUser'} );
+    $cfs->LimitToLookupType( RT::Asset->CustomFieldLookupType );
+    my $tree = RT::Interface::Web::QueryBuilder::Tree->new;
+    $tree->ParseSQL(
+        Class       => 'RT::Assets',
+        Query       => $ARGS{Query},
+        CurrentUser => $session{CurrentUser},
+    );
+    my $catalogs = $tree->GetReferencedCatalogs;
+    my @ids;
+    for my $name ( keys %$catalogs ) {
+        my $catalog = RT::Catalog->new( $session{CurrentUser} );
+        $catalog->Load($name);
+        if ( $catalog->Id ) {
+            push @ids, $catalog->Id;
+            $cfs->SetContextObject($catalog) if keys %$catalogs == 1;
+        }
+        else {
+            RT->Logger->warning("Couldn't load catalog $name");
+        }
+    }
+    $cfs->LimitToGlobalOrObjectId(@ids);
+
+    if ( @ids ) {
+        $single_roles->LimitToObjectId($_) for @ids;
+        $multi_roles->LimitToObjectId($_) for @ids;
+    }
+}
+else {
+    $cfs = $catalog_obj->AssetCustomFields;
+    $single_roles->LimitToObjectId( $catalog_obj->Id );
+    $multi_roles->LimitToObjectId( $catalog_obj->Id );
+}
+
+if ( $single_roles->_isLimited ) {
+    $single_roles->LimitToLookupType( RT::Asset->CustomFieldLookupType );
+    $single_roles->LimitToSingleValue;
+}
+
+if ( $multi_roles->_isLimited ) {
+    $multi_roles->LimitToLookupType( RT::Asset->CustomFieldLookupType );
+    $multi_roles->LimitToMultipleValue;
+}
+
+if ( $ARGS{'CreateLinkedTicket'} ){
+    my $url = RT->Config->Get('WebURL') . "Asset/CreateLinkedTicket.html";
+    $url .= '?'. $m->comp( '/Elements/QueryString', 'Assets' => \@UpdateAsset );
+    RT::Interface::Web::Redirect($url);
+}
+elsif ( $ARGS{Update} ) {
+    my @attributes  = $asset->WritableAttributes;
+    @attributes = grep exists $ARGS{ 'Update'. $_ }, @attributes;
+    my %basics = map { $_ => $ARGS{ 'Update'. $_ } } @attributes;
+
+    foreach my $aid ( @UpdateAsset ) {
+        my $asset = LoadAsset($aid);
+
+        my @tmp_res;
+        push @tmp_res, UpdateRecordObject(
+            Object          => $asset,
+            AttributesRef   => \@attributes,
+            ARGSRef         => \%basics,
+        );
+        push @tmp_res, ProcessAssetRoleMembers( $asset => %ARGS );
+        push @tmp_res, ProcessObjectCustomFieldUpdates( Object => $asset, ARGSRef => \%ARGS );
+        push @tmp_res, ProcessRecordLinks( RecordObj => $asset, RecordId => 'Asset', ARGSRef => \%ARGS );
+        push @tmp_res, ProcessRecordBulkCustomFields( RecordObj => $asset, ARGSRef => \%ARGS );
+
+        my $prefix = loc('Asset') . ' ' . $asset->Id . ': ';
+        push @results, map { /^$prefix/ ? $_ : loc( "Asset [_1]: [_2]", $asset->id, $_ ) } @tmp_res;
+    }
+
+    MaybeRedirectForResults(
+        Actions     => \@results,
+        Arguments   => { map { $_ => $ARGS{$_} } grep { defined $ARGS{$_} } @{$search{'PassArguments'}}, qw(Query Format OrderBy Order Rows Page Token) },
+    );
+}
+</%INIT>
+<%ARGS>
+@UpdateAsset => ()
+</%ARGS>

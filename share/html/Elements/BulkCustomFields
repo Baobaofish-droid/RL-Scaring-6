@@ -1,0 +1,149 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<div class="bulk-edit-custom-fields">
+
+  <div class="row mt-2">
+    <div class="label col-4 text-start">
+      <&|/l&>Name</&>
+    </div>
+    <div class="label col-4 text-start">
+      <&|/l&>Add values</&>
+    </div>
+    <div class="label col-4 text-start">
+      <&|/l&>Delete values</&>
+    </div>
+  </div>
+% my $i = 0;
+% while (my $cf = $CustomFields->Next) {
+  <div class="row mt-2 py-2 <% ++$i%2 ? 'oddline': 'evenline' %>">
+    <div class="label col-4 text-start">
+      <span class="name <% $cf->EntryHint ? 'prev-icon-helper' : '' %>"><% $cf->Name %></span>\
+% if ( $cf->EntryHint ) {
+<% GetSVGImage( Name => 'info', ExtraClasses => 'icon-helper', Title => $cf->EntryHint, Size => 12 ) |n %>
+% }
+    </div>
+% my $rows = 5;
+% my $cf_id = $cf->id;
+% my @add = (NamePrefix => 'Bulk-Add-CustomField-', CustomField => $cf, Rows => $rows,
+%   MaxValues => $cf->MaxValues, Multiple => ($cf->MaxValues == 1 ? 0 : 1) , Cols => 25,
+%   Default => $ARGS{"Bulk-Add-CustomField-$cf_id-Values"} || $ARGS{"Bulk-Add-CustomField-$cf_id-Value"},
+%   ShowEmptyOption => 1 );
+% my @del = (NamePrefix => 'Bulk-Delete-CustomField-', CustomField => $cf,
+%   MaxValues => 0, Rows => $rows, Multiple => 1, Cols => 25,
+%   Default => $ARGS{"Bulk-Delete-CustomField-$cf_id-Values"} || $ARGS{"Bulk-Delete-CustomField-$cf_id-Value"}, );
+% if ($cf->Type eq 'Select') {
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldSelect, @add &>
+    </div>
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldSelect, @del &>
+% } elsif ($cf->Type eq 'Combobox') {
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldCombobox, @add &>
+    </div>
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldCombobox, @del &>
+% } elsif ($cf->Type eq 'Freeform') {
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldFreeform, @add &>
+    </div>
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldFreeform, @del &>
+% } elsif ($cf->Type eq 'Text') {
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldText, @add &>
+% } elsif ($cf->Type eq 'HTML') {
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldHTML, @add &>
+    </div>
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldHTML, @del &>
+% } elsif ($cf->Type eq 'Wikitext') {
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldWikitext, @add &>
+% } elsif ($cf->Type eq 'Date') {
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldDate, @add &>
+    </div>
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldDate, @del &>
+% } elsif ($cf->Type eq 'DateTime') {
+% # Pass datemanip format to prevent another tz date conversion
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldDateTime, @add, Default => undef, Format => 'datemanip' &>
+    </div>
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldDateTime, @del, Default => undef, Format => 'datemanip' &>
+% } elsif ($cf->Type eq 'Autocomplete') {
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldAutocomplete, @add &>
+    </div>
+    <div class="value col-4">
+      <& /Elements/EditCustomFieldAutocomplete, @del &>
+% } else {
+    <div class="value col-4">
+      <em><&|/l&>(Unsupported custom field type)</&></em>
+    </div>
+  </div>
+%   $RT::Logger->info("Unknown CustomField type: " . $cf->Type);
+%   next
+% }
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input" id="Bulk-Delete-CustomField-<% $cf_id %>-AllValues" name="Bulk-Delete-CustomField-<% $cf_id %>-AllValues" value="1">
+        <label class="form-check-label" for="Bulk-Delete-CustomField-<% $cf_id %>-AllValues"><em><&|/l&>(Check to delete all values)</&></em></label>
+      </div>
+    </div>
+  </div>
+% }
+</div>
+<%ARGS>
+$CustomFields
+</%ARGS>
+<%INIT>
+return unless $CustomFields->Count;
+</%INIT>

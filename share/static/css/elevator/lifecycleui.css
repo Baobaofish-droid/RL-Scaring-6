@@ -1,0 +1,37 @@
+path.link {
+    fill: none;
+    stroke: #000;
+    stroke-width: 2px;
+    cursor: pointer;
+}
+
+
+g circle.node-selected {
+    stroke-width: 3px !important;
+}
+
+.dragline {
+    fill: none;
+    stroke: #000;
+    stroke-width: 2px;
+    cursor: pointer;
+}
+
+.lifeycycle-ui-edit-node {
+    position: absolute;
+    z-index: 99;
+}
+
+#color-inputs .form-control {
+    background-color: #e9ecef;
+}
+
+.svg-content-responsive {
+    display: inline-block;
+}
+
+svg .rect {
+    fill: gold;
+    stroke: steelblue;
+    stroke-width: 5px;
+}

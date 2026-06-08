@@ -1,0 +1,122 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%ARGS>
+$Name
+$Attr => undef
+$GenericMap => {}
+</%ARGS>
+<%ONCE>
+my $COLUMN_MAP = {
+    Name => {
+        title     => 'Name', # loc
+        attribute => 'Name',
+        value     => sub { return $_[0]->Name()||loc("Unnamed search") },
+    },
+    Description => {
+        title     => 'Description', # loc
+        attribute => 'Description',
+        value     => sub { return $_[0]->Description() },
+    },
+    Type => {
+        title     => 'Type', # loc
+        attribute => 'Type',
+        value     => sub { return $_[0]->Type() },
+    },
+    Disabled => {
+        title     => 'Status', # loc
+        attribute => 'Disabled',
+        value     => sub { return $_[0]->Disabled? $_[0]->loc('Disabled'): $_[0]->loc('Enabled') },
+    },
+    DisabledEdit => {
+        title     => 'Enabled', # loc
+        attribute => 'Disabled',
+        value     => sub {
+            my $search = shift;
+            my $id = $search->Id;
+            my $checked = $search->Disabled ? '' : 'checked="checked"';
+            return \qq{
+<input type="hidden" name="SavedSearchEnabled-$id-Magic" value="1" />
+<div class="form-check">
+  <input type="checkbox" name="SavedSearchEnabled-$id" id="SavedSearch-$id" value="1" class="checkbox form-check-input" $checked />
+  <label class="form-check-label" for="SavedSearch-$id"></label>
+</div>};
+        },
+    },
+    Query => {
+        title     => 'Query', # loc
+        value     => sub { return $_[0]->Content->{'Query'} },
+    },
+    Results => {
+        title     => '',
+        value     => sub {
+            my $search = shift;
+            # Graph doesn't have a static result URL
+            return $search->Name if $search->Type eq 'Graph';
+
+            my $content = $search->Content;
+            my $link =
+                  RT->Config->Get('WebPath') . '/Search/'
+                . ( $search->Type =~ /Chart/ ? 'Chart.html' : 'Results.html' ) . '?'
+                . $m->comp(
+                    '/Elements/QueryString',
+                    ShortenSearchQuery(
+                        SavedSearchLoad => $search->Id,
+                        Class           => $search->Class,
+                        map { $_ => $content->{$_} } grep { defined $content->{$_} } keys %$content
+                    )
+                );
+            return \'<a href="', $link, \'">', $search->Name, \'</a>';
+        },
+    },
+};
+
+</%ONCE>
+<%INIT>
+$m->callback( GenericMap => $GenericMap, COLUMN_MAP => $COLUMN_MAP, CallbackName => 'ColumnMap', CallbackOnce => 1 );
+return GetColumnMapEntry( Map => $COLUMN_MAP, Name => $Name, Attribute => $Attr );
+</%INIT>

@@ -1,0 +1,266 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Elements/Header, Title => $title &>
+<& /Elements/Tabs &>
+<& /Elements/ListActions, actions => \@results &>
+
+<form action="<%RT->Config->Get('WebPath')%>/Dashboards/Modify.html" method="post" enctype="multipart/form-data" name="ModifyDashboard" id="ModifyDashboard">
+
+%unless ($Dashboard->Id) {
+<input type="hidden" class="hidden" name="id" value="new" />
+% } else {
+<input type="hidden" class="hidden" name="id" value="<%$Dashboard->Id%>" />
+% }
+
+<&|/Widgets/TitleBox, title => loc('Basics') &>
+  <&| /Elements/LabeledValue, Label => loc('Name') &>
+    <input class="form-control" type="text" name="Name" value="<%$Dashboard->Name%>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('Description') &>
+    <input class="form-control" type="text" name="Description" value="<%$Dashboard->Description%>" />
+  </&>
+  <&| /Elements/LabeledValue, Label => loc('Privacy') &>
+      <& /Dashboards/Elements/SelectPrivacy, Name => "PrincipalId", Objects => \@privacies, Default => $Dashboard->PrincipalId &>
+  </&>
+
+  <&| /Elements/LabeledValue, Label => '' &>
+    <div class="form-check">
+      <input type="checkbox" class="form-check-input checkbox" id="Enabled" name="Enabled" value="1" <% $ARGS{'Disabled'} ? '' : 'checked' %> />
+      <input type="hidden" class="hidden" name="SetEnabled" value="1" />
+      <label class="form-check-label" for="Enabled"><&|/l&>Enabled (Unchecking this box disables this dashboard)</&></label>
+    </div>
+  </&>
+
+% if ( $Dashboard->Id && $Dashboard->DependedOnBy->Count ) {
+  <&| /Elements/LabeledValue, Label => loc('Depended on by'), ValueSpanClass => 'form-control current-value' &>
+    <a href="#" data-bs-toggle="modal" data-bs-target="#dashboard-depended-on-by-list-modal"><% loc('View') %></a>
+  </&>
+% }
+</&>
+
+<& /Elements/Submit, Name => 'Save', Label =>( $Create ? loc('Create') : loc('Save Changes') ), FullWidth => 1 &>
+
+% if ($Dashboard->Id && $Dashboard->DependedOnBy->Count ) {
+
+<script type="text/javascript">
+document.querySelector('#ModifyDashboard input[name=Enabled]').addEventListener('change', function() {
+    if ( !this.checked ) {
+        const modal = new bootstrap.Modal('#disable-dashboard-confirm-modal');
+        this.checked = true;
+        modal.show();
+    }
+});
+document.querySelector('#ModifyDashboard #Disable').addEventListener('click', function() {
+    document.querySelector('#ModifyDashboard input[name=Enabled]').checked = false;
+});
+</script>
+<div class="modal" id="disable-dashboard-confirm-modal">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><&|/l&>Really Disable?</&></h5>
+        <a href="javascript:void(0)" class="close" data-bs-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </a>
+      </div>
+      <div class="modal-body">
+        <& SELF:GetDependedOnByList, Object => $Dashboard &>
+      </div>
+      <div class="modal-footer">
+        <div class="row mt-2 justify-content-end">
+          <div class="col-auto">
+            <input type="button" data-bs-dismiss="modal" class="btn btn-primary" id="Disable" value="<% loc('Disable') %>" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="dashboard-depended-on-by-list-modal">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><&|/l&>Depended On By List</&></h5>
+        <a href="javascript:void(0)" class="close" data-bs-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </a>
+      </div>
+      <div class="modal-body">
+        <& SELF:GetDependedOnByList, Object => $Dashboard &>
+      </div>
+    </div>
+  </div>
+</div>
+% }
+</form>
+<%INIT>
+
+my ($title, @results);
+my $tried_create = 0;
+
+# user went directly to Modify.html
+$Create = 1 if !$id;
+
+
+my $redirect_to ='/Dashboards/Modify.html';
+
+use RT::Dashboard;
+
+my $Dashboard = RT::Dashboard->new($session{'CurrentUser'});
+my $method = $Create ? 'ObjectsForCreating' : 'ObjectsForModifying';
+my @privacies = $Dashboard->$method;
+
+Abort(loc("Permission Denied"), Code => HTTP::Status::HTTP_FORBIDDEN) if @privacies == 0;
+
+$ARGS{Disabled} = $ARGS{Enabled} ? 0 : 1 if $ARGS{SetEnabled};
+
+if ($Create) {
+    $title = loc("Create a new dashboard");
+}
+else {
+    if ($id eq 'new') {
+        $tried_create = 1;
+
+        my ($val, $msg) = $Dashboard->Create(
+            map { $_ => $ARGS{$_} } qw/Name Description PrincipalId Disabled/,
+        );
+
+        if (!$val) {
+            Abort(loc("Dashboard could not be created: [_1]", $msg));
+        }
+
+        push @results, $msg;
+        $id = $Dashboard->Id;
+
+        ( $val, $msg )
+            = $Dashboard->SetContent( { Elements => [ { Layout => 'col-12', Elements => [ [] ] } ] } );
+        if ( !$val ) {
+            RT->Logger->error("Unable to set dashboard #id initial content: $msg");
+            push @results, $msg;
+        }
+
+        if (!$Dashboard->id || ! $Dashboard->CurrentUserCanSee) {
+            $redirect_to='/Dashboards/index.html';
+
+        }
+    }
+    else {
+        my ($ok, $msg) = $Dashboard->LoadById($id);
+        unless ($ok) {
+            RT::Logger->error("Unable to load dashboard with $id: $msg");
+            Abort(loc("Could not load dashboard [_1]", $id), Code => HTTP::Status::HTTP_NOT_FOUND);
+        }
+
+        Abort('Permission Denied') unless $Dashboard->CurrentUserCanSee;
+        $ARGS{Disabled} //= $Dashboard->Disabled;
+    }
+
+    if ($id) {
+        $title = loc("Modify the dashboard [_1]", $Dashboard->Name);
+    }
+    # If the create failed
+    else {
+        $Create = 1;
+        $title = loc("Create a new dashboard");
+    }
+}
+
+if (!$Create && !$tried_create && $id && $ARGS{'Save'}) {
+    push @results, $Dashboard->Update(
+        ARGSRef => \%ARGS,
+        AttributesRef => [ qw/Name Description PrincipalId Disabled/ ],
+    );
+}
+
+
+# This code does automatic redirection if any updates happen.
+MaybeRedirectForResults(
+    Actions   => \@results,
+    Path      => $redirect_to,
+    Arguments => { id => $id },
+);
+
+</%INIT>
+
+<%ARGS>
+$Create => undef
+$Name => undef
+$id => '' unless defined $id
+</%ARGS>
+
+<%METHOD GetDependedOnByList>
+
+% my $links = $Object->DependedOnBy;
+% $links->RowsPerPage(50);
+% my $total = $links->CountAll;
+  <p>
+    <&|/l, $total &>This dashboard is used in homepage of the following [quant,_1,user,users]</&>:
+  </p>
+  <ul class="dashboard-depended-on-by-list list-group-compact">
+% while ( my $link = $links->Next ) {
+    <li class="list-group-item">
+%   if ( $link->BaseObj->ObjectType eq 'RT::System' ) {
+      <% loc('Global') %>
+%   } elsif ( $link->BaseObj->ObjectType eq 'RT::User' ) {
+      <% loc('User') %>: <& /Elements/ShowUser, User => $link->BaseObj->Object, LinkTarget => '_blank' &>
+%   } else {
+       <% $link->BaseObj->ObjectType %>: #<% $link->BaseObj->ObjectId %>
+%   }
+    </li>
+% }
+
+% if ( $total > 50 ) {
+    <li class="list-group-item">...</li>
+% }
+  </ul>
+
+<%ARGS>
+$Object
+</%ARGS>
+</%METHOD>

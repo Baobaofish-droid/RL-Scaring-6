@@ -1,0 +1,237 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Admin/Elements/Header, Title => $title &>
+<& /Elements/Tabs &>
+
+% $m->callback(CallbackName => 'BeforeActionList', %ARGS, Actions => \@results, ARGSRef => \%ARGS, Group => $Group);
+
+<& /Elements/ListActions, actions => \@results &>
+
+<form action="<% RT->Config->Get('WebPath') %>/Admin/Groups/Members.html" method="post">
+<input type="hidden" class="hidden" name="id" value="<%$Group->Id%>" />
+<input type="hidden" class="hidden" name="Rows" value="<% $Rows %>" />
+<input type="hidden" class="hidden" name="Page" value="<% $Page %>" />
+
+% $m->callback(CallbackName => 'BeforeEditMembership', %ARGS, Actions => \@results, ARGSRef => \%ARGS, Group => $Group);
+
+<&| /Widgets/TitleBox, title => loc('Editing membership for group [_1]', $Group->Label) &>
+
+<div class="row mt-2">
+  <div class="col-6">
+    <h3><&|/l&>Current members</&></h3>
+
+% if ($Group->MembersObj->Count == 0 ) {
+      <em><&|/l&>(No members)</&></em>
+% } else {
+      <h4><&|/l&>Users</&></h4>
+% my $Users = $Group->UserMembersObj( Recursively => 0 );
+% $Users->RowsPerPage($Rows);
+% $Users->GotoPage($Page - 1);
+      <ul class="list-group list-group-compact">
+% while ( my $user = $Users->Next ) {
+% $UsersSeen{ $user->id } = 1 if $SkipSeenUsers;
+% my $id = 'DeleteMember-' . $user->PrincipalObj->Id;
+        <li class="list-group-item">
+          <div class="form-check">
+            <input type="checkbox" class="checkbox form-check-input" id="<% $id %>" name="<% $id %>" value="1" />
+            <label class="form-check-label" for="<% $id %>"><& /Elements/ShowUser, User => $user &></label>
+          </div>
+        </li>
+% }
+      </ul>
+      <h4><&|/l&>Groups</&></h4>
+      <ul class="list-group list-group-compact">
+% my $Groups = $Group->GroupMembersObj( Recursively => 0 );
+% $Groups->RowsPerPage($Rows);
+% $Groups->GotoPage($Page - 1);
+% while ( my $group = $Groups->Next ) {
+% $GroupsSeen{ $group->id } = 1 if $SkipSeenGroups;
+% my $id= 'DeleteMember-' .  $group->id;
+      <li class="list-group-item">
+        <div class="form-check">
+          <input type="checkbox" class="checkbox form-check-input" id="<% $id%>" name="<% $id %>" value="1" />
+          <label class="form-check-label" for="<% $id %>">
+            <a href="<% RT->Config->Get('WebPath') %>/Admin/Groups/Modify.html?id=<% $group->id %>"><% $group->Name %></a>
+          </label>
+        </div>
+      </li>
+% }
+      </ul>
+      <em><&|/l&>(Check box to delete)</&></em>
+% }
+
+  </div>
+  <div class="col-6">
+    <h3><&|/l&>Add members</&></h3>
+    <& /Admin/Elements/SelectNewGroupMembers, Name => "AddMembers", Group => $Group,
+        SkipUsers => \%UsersSeen, SkipGroups => \%GroupsSeen &>
+  </div>
+</div>
+
+% if ( $Pages ) {
+    <& /Elements/CollectionListPaging,
+        BaseURL     => '?',
+        Rows        => $Rows,
+        TotalFound  => $TotalFound,
+        CurrentPage => $Page,
+        Pages       => $Pages,
+        URLParams   => { map { $_ => $ARGS{$_} } qw/id Rows Page/ },
+    &>
+% }
+
+</&>
+
+<& /Elements/Submit, Label => loc('Modify Members'), Reset => 1, FullWidth => 1 &>
+</form>
+
+
+<%INIT>
+
+my $Group = RT::Group->new($session{'CurrentUser'});
+$Group->Load($id) || Abort(loc('Could not load group'));
+
+my $title = loc("Modify the group [_1]", $Group->Label);
+
+my (%UsersSeen, %GroupsSeen);
+$GroupsSeen{ $Group->id } = 1; # can't be a member of ourself
+
+my (@results);
+
+$m->callback(
+    CallbackName        => 'BeforeProcessArguments',
+    ARGSRef             => \%ARGS,
+    GroupObj            => $Group,
+    Actions             => \@results,
+    AddMembersUsersRef  => \@AddMembersUsers,
+    AddMembersGroupsRef => \@AddMembersGroups,
+);
+
+# XXX: safe member id in value instead of name
+foreach my $key (keys %ARGS) {
+    next unless $key =~ /^DeleteMember-(\d+)$/;
+
+    my ($val,$msg) = $Group->DeleteMember($1);
+    push (@results, $msg);
+}
+
+# Process new users
+foreach my $member (grep $_, @AddMembersUsers) {
+    my $principal;
+    my $user = RT::User->new($session{'CurrentUser'});
+
+    if ($member =~ /^User-(\d+)$/) {
+        # Old style, using id
+        my ($ret, $msg) = $user->Load($1);
+        if ( $ret ){
+            $principal = $user->PrincipalObj;
+        }
+        else {
+            RT::Logger->error("Unable to load user with id $1: $msg");
+        }
+    }
+    else {
+        # Accept username or email address
+        my $msg;
+        ($principal, $msg) = RT->System->CanonicalizePrincipal( User => $member );
+        RT::Logger->error("Unable to load principal: $msg") unless $principal;
+    }
+
+    if ( $principal and $principal->Id ){
+        my ($val, $msg) = $Group->AddMember($principal->Id);
+        push (@results, $msg);
+    }
+    else {
+        push (@results, "Unable to load user $member");
+    }
+}
+
+# Process new groups
+foreach my $member (grep $_, @AddMembersGroups) {
+    my $principal = RT::Group->new($session{'CurrentUser'});
+
+    if ($member =~ /^Group-(\d+)$/) {
+        # Old style, using id
+        $principal->Load($1);
+    } else {
+        # New style, just a group name
+        $principal->LoadUserDefinedGroup($member);
+    }
+
+    my ($val, $msg) = $Group->AddMember($principal->PrincipalId);
+    push (@results, $msg);
+}
+
+$m->callback( CallbackName => 'AfterUpdate', %ARGS, Actions => \@results, ARGSRef => \%ARGS, Group => $Group );
+
+$Rows ||= 50;
+$Page ||= 1;
+my $TotalFound = $Group->UserMembersObj( Recursively => 0 )->Count;
+if ( my $group_count = $Group->GroupMembersObj( Recursively => 0 )->Count ) {
+    $TotalFound = $group_count if $TotalFound < $group_count;
+}
+
+my $Pages;
+if ( $TotalFound && $TotalFound > $Rows ) {
+    $Pages = int( $TotalFound / $Rows ) + ( $TotalFound % $Rows ? 1 : 0 );
+    # This could happen if admin deletes records on the last page.
+    $Page = $Pages if $Page > $Pages;
+}
+else {
+    $Page = 1;
+}
+</%INIT>
+
+<%ARGS>
+@AddMembersUsers  => ()
+@AddMembersGroups => ()
+$id => undef
+$SkipSeenUsers => 1
+$SkipSeenGroups => 1
+$Rows => RT->Config->Get('AdminSearchResultRows')->{Users}
+$Page => 1
+</%ARGS>

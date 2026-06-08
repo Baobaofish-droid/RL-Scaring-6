@@ -1,0 +1,402 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Admin/Elements/Header, Title => loc('Select a user') &>
+<& /Elements/Tabs &>
+<div class="container">
+<&| /Widgets/TitleBox, hideable => 0, class => 'admin-select-user', content_class => 'mx-auto width-md' &>
+  <form method="post" action="<% RT->Config->Get('WebPath') %>/Admin/Users/index.html" class="mx-auto">
+% foreach my $field( qw(Format Rows Page Order OrderBy) ) {
+%     next unless defined $ARGS{ $field } && length $ARGS{ $field };
+<input type="hidden" name="<% $field %>" value="<% $ARGS{ $field } %>" />
+% }
+  <input type="hidden" name="UserField" value="Name" />
+  <input type="hidden" name="UserOp" value="LIKE" />
+
+  <div class="row mt-2">
+    <div class="label col-4 text-start">
+      <&|/l&>Go to user</&>
+    </div>
+    <div class="col-8">
+      <input type="text" class="form-control" name="UserString" value="" data-autocomplete="Users" data-autocomplete-return="id" id="autocomplete-UserString" />
+    </div>
+  </div>
+<script type="text/javascript">
+jQuery(function(){
+    // Jump directly to the page if a user is chosen
+    jQuery("#autocomplete-UserString").on("change", function() {
+        if ( this.value && this.value.match(/^\d+$/) ) {
+            htmx.ajax('GET', RT.Config.WebPath + "/Admin/Users/Modify.html?id=" + this.value, {
+                target: '.main-container',
+                select: '.main-container',
+                swap: 'outerHTML',
+                headers: {
+                    'HX-Boosted': true
+                }
+            });
+        }
+    });
+});
+</script>
+  </form>
+  <hr />
+  <p class="fw-bold"><&|/l&>Additional search options</&></p>
+  <form method="post" action="<% RT->Config->Get('WebPath') %>/Admin/Users/index.html" name="UsersAdmin" class="mx-auto max-width-md">
+
+% foreach my $field( qw(Format Rows Page Order OrderBy) ) {
+%     next unless defined $ARGS{ $field } && length $ARGS{ $field };
+<input type="hidden" name="<% $field %>" value="<% $ARGS{ $field } %>" />
+% }
+
+  <div class="row mt-2">
+    <div class="label col-3 text-start">
+      <&|/l&>Include</&>
+    </div>
+    <div class="col-3">
+      <select name="IncludeSystemGroups" class="form-select selectpicker">
+% my $group_selected;
+% for my $group_value ( qw(Privileged Unprivileged All) ) {
+%   $group_selected = '';
+%   if ( $group_value eq $IncludeSystemGroups ) {
+%     $group_selected = 'selected="selected"';
+%   }
+          <option value="<% $group_value %>" <% $group_selected |n %>><% loc($group_value) %></option>
+% }
+      </select>
+    </div>
+  </div>
+  <div class="row mt-2">
+    <div class="label col-3 text-start">
+      <&|/l&>Find all users whose</&>
+    </div>
+      <& /Elements/SelectUsers, %ARGS, Fields => \@fields &>
+  </div>
+
+  <div class="row mt-2">
+    <div class="label col-3 text-start">
+      <&|/l&>And all users whose</&>
+    </div>
+    <& /Elements/SelectUsers, %ARGS, Fields => \@fields,
+        SelectFieldName => 'UserField2',
+        SelectOpName    => 'UserOp2',
+        InputStringName => 'UserString2',
+        UserField       => $UserField2,
+        UserOp          => $UserOp2,
+        UserString      => $UserString2,
+    &>
+  </div>
+
+  <div class="row mt-2">
+    <div class="label col-3 text-start">
+      <&|/l&>And all users whose</&>
+    </div>
+    <& /Elements/SelectUsers, %ARGS, Fields => \@fields,
+        SelectFieldName => 'UserField3',
+        SelectOpName    => 'UserOp3',
+        InputStringName => 'UserString3',
+        UserField       => $UserField3,
+        UserOp          => $UserOp3,
+        UserString      => $UserString3,
+    &>
+  </div>
+% foreach ( @lines ) {
+  <& /Search/Elements/ConditionRow, Condition => $_ &>
+% }
+
+<script type="text/javascript">
+jQuery(function() {
+    var orig_op;
+    var orig_value;
+    let is_initial_setup = true;
+    jQuery('select[name^=UserField]').change(function() {
+        var form = jQuery(this).closest('form');
+        var row = jQuery(this).closest('div.row');
+        var val = jQuery(this).val();
+
+        orig_op ||= form.find(':input[name=UserOp]').clone().val('LIKE');
+        orig_value ||= form.find(':input[name=UserString]').clone().val('');
+
+        var new_operator;
+        var new_value;
+        if ( val.match(/CustomField-/) ) {
+            new_operator = form.find(':input[name="' + val + 'Op"]:first').clone();
+
+            var new_value = form.find(':input[name="ValueOf' + val + '"]:first');
+            new_value = new_value.clone();
+
+            new_value.attr('id', null);
+        }
+        else {
+            new_operator = orig_op;
+            new_value = orig_value;
+        }
+
+        new_operator.attr('name', jQuery(this).attr('name').replace(/Field/, 'Op'));
+        new_operator.get(0).tomselect?.destroy();
+        new_operator.removeClass('tomselected ts-hidden-accessible');
+
+        new_value.attr('name', jQuery(this).attr('name').replace(/Field/, 'String'));
+        new_value.get(0).tomselect?.destroy();
+        new_value.removeClass('tomselected ts-hidden-accessible');
+
+        if ( is_initial_setup ) {
+            // operator options might not contain the current value
+            new_operator.val(row.find('div.operator :input[Name^=UserOp]').attr('data-value'));
+            new_value.val(row.find('div.value :input[Name^=UserString]').val());
+        }
+
+        row.children('div.operator').children().remove();
+        row.children('div.operator').append(new_operator);
+
+        row.children('div.value').children().remove();
+        row.children('div.value').append(new_value);
+        if ( new_value.hasClass('datepicker') ) {
+            initDatePicker(row);
+        }
+        initializeSelectElements(row.get(0));
+    });
+
+%   for my $suffix ( '', 2 .. 3 ) {
+%       if ( ($DECODED_ARGS->{"UserField$suffix"} // '') =~ /^CustomField-/ ) {
+            jQuery('form[name=UsersAdmin] select[name=UserField<% $suffix %>]').change();
+%       }
+%   }
+    is_initial_setup = false;
+});
+</script>
+
+  <div class="row mt-2">
+    <div class="label col-3 text-start pt-1">
+      <&|/l&>Include all</&>
+    </div>
+    <div class="col-auto mt-1">
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input checkbox" id="FindEnabledUsers" name="FindEnabledUsers" value="1" <% $FindEnabledUsers? 'checked="checked"': '' %> />
+        <label class="form-check-label" for="FindEnabledUsers"><&|/l&>Enabled users</&></label>
+      </div>
+    </div>
+    <div class="col-auto mt-1">
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input checkbox" id="FindDisabledUsers" name="FindDisabledUsers" value="1" <% $FindDisabledUsers? 'checked="checked"': '' %> />
+        <label class="form-check-label" for="FindDisabledUsers"><&|/l&>Disabled users</&></label>
+      </div>
+    </div>
+  </div>
+
+% $m->callback( %ARGS, UsersObj => $users, CallbackName => 'InUsersAdminForm' );
+
+  <div class="row mt-2">
+    <div class="col-12 text-end">
+      <input type="submit" class="btn btn-primary" value="<&|/l&>Go!</&>" name="Go" />
+    </div>
+  </div>
+  </form>
+</&>
+</div>
+<br />
+% unless ( $users->Count ) {
+<p class="fw-bold"><&|/l&>No users matching search criteria found.</&></p>
+% } else {
+<p><&|/l&>Select a user</&>:</p>
+
+<%perl>
+my %collection_list_args = (
+    OrderBy => 'Name',
+    Order => 'ASC',
+    Rows  => $Rows,
+    %ARGS,
+    Format => $Format,
+    Collection => $users,
+    AllowSorting => 1,
+    PassArguments => [qw(Format Rows Page Order OrderBy UserString UserOp UserField UserString2 UserOp2 UserField2 UserString3 UserOp3 UserField3 IdLike EmailLike FindDisabledUsers FindEnabledUsers IncludeSystemGroups)],
+);
+</%perl>
+
+% $m->callback( %ARGS, UsersObj => $users, CallbackName => 'ModifyCollectionListArgs', CollectionListArgs => \%collection_list_args );
+<& /Elements/CollectionList, %collection_list_args &>
+
+% }
+
+<%INIT>
+my $caption;
+my $users = RT::Users->new( $session{'CurrentUser'} );
+
+if ( $FindEnabledUsers ) {
+    $FindDisabledUsers ? $users->FindAllRows : $users->LimitToEnabled;
+}
+else {
+    if ( not $FindDisabledUsers ) {
+        # If both FindEnabled and FindDisabled are false, there are no results,
+        # so set FindEnabled as a default
+        $FindEnabledUsers = 1;
+    }
+    $FindDisabledUsers ? $users->LimitToDeleted : $users->LimitToEnabled;
+}
+
+$m->callback( UsersObj => $users, ARGSRef => \%ARGS, CallbackName => 'Initial' );
+
+$caption = loc("Users matching search criteria");
+my @users_queries = ();
+push @users_queries, { field => $UserField, op => $UserOp, string => $UserString } if length $UserString;
+push @users_queries, { field => $UserField2, op => $UserOp2, string => $UserString2 } if length $UserString2;
+push @users_queries, { field => $UserField3, op => $UserOp3, string => $UserString3 } if length $UserString3;
+
+if ( scalar @users_queries ) {
+    foreach my $user ( @users_queries ) {
+        if ( $user->{'string'} eq 'NULL' ) {
+            if ( $user->{'op'} =~ /!=|\bNOT\b/i ) {
+                $user->{'op'} = 'IS NOT';
+            }
+            else {
+                $user->{'op'} = 'IS';
+            }
+        }
+
+        if ( $user->{'field'} =~ /^CustomField-(\d+)/ ) {
+            $users->LimitCustomField(
+                CUSTOMFIELD => $1,
+                OPERATOR => $user->{'op'},
+                VALUE => $user->{'string'},
+                ENTRYAGGREGATOR => 'AND',
+            );
+        }
+        else {
+            $users->Limit(
+                FIELD => $user->{'field'},
+                OPERATOR => $user->{'op'},
+                VALUE => $user->{'string'},
+                ENTRYAGGREGATOR => 'AND',
+            );
+        }
+    }
+    RT::Interface::Web::Redirect(RT->Config->Get('WebURL')."Admin/Users/Modify.html?id=".$users->First->id)
+          if $users->Count == 1;
+}
+
+if ( $IncludeSystemGroups eq 'Privileged' ) {
+    $caption = loc("Privileged users");
+    $users->LimitToPrivileged;
+}
+elsif ( $IncludeSystemGroups eq 'Unprivileged' ) {
+    $caption = loc("Unprivileged users");
+    $users->LimitToUnprivileged;
+}
+else {
+    # Must be all
+    $caption = loc("All users");
+}
+
+$users->LimitToEndUsers;
+
+$Format ||= RT->Config->Get('AdminSearchResultFormat')->{'Users'};
+my $Rows = RT->Config->Get('AdminSearchResultRows')->{'Users'} || 50;
+
+# Build up the list of fields to display for searching
+my $i = 0;
+my %sorted = map { $_ => $i++ } qw(
+    Name EmailAddress RealName Organization NickName WorkPhone HomePhone
+    MobilePhone PagerPhone Address1 Address2 City State Zip Country
+    Timezone Lang Gecos SMIMECertificate Comments
+);
+
+my @attrs = sort { $sorted{$a} <=> $sorted{$b} }
+            grep { !/(?:^id$|ContactInfo|AuthToken|^Last|^Creat(?:ed|or)$|^Signature$|Image)/ }
+            RT::User->ReadableAttributes;
+my @fields;
+
+for my $name (@attrs) {
+    my $label = $m->comp(
+        '/Elements/ColumnMap',
+        Class   => 'RT__User',
+        Name    => $name,
+        Attr    => 'title'
+    );
+
+    push @fields, [ $name, $label || $name ];
+}
+
+my $CustomFields = RT::CustomFields->new($session{'CurrentUser'});
+$CustomFields->LimitToLookupType('RT::User');
+
+# Based on /Search/Elements/PickCFs, with different input names
+my @lines;
+while ( my $CustomField = $CustomFields->Next ) {
+    my %line = ( Class => 'hidden' );
+    $line{'Name'} = "CustomField-" . $CustomField->id;
+    $line{'Field'} = $CustomField->Name;
+
+    # Op
+    $line{'Op'} = GetCustomFieldSearchOperator( CustomField => $CustomField );
+
+    # Value
+    $line{'Value'} = {
+        Type => 'component',
+        Path => '/Elements/SelectCustomFieldValue',
+        Arguments => { CustomField => $CustomField },
+    };
+
+    push @lines, \%line;
+}
+</%INIT>
+<%ARGS>
+$Format => undef,
+
+$UserString => undef
+$UserOp => undef
+$UserField => 'Name'
+$UserString2 => undef
+$UserOp2 => undef
+$UserField2 => 'Name'
+$UserString3 => undef
+$UserOp3 => undef
+$UserField3 => 'Name'
+$IdLike => undef
+$EmailLike => undef
+$FindDisabledUsers => 0
+$FindEnabledUsers => undef
+$IncludeSystemGroups => 'Privileged'
+</%ARGS>

@@ -1,0 +1,515 @@
+#!@PERL@
+# BEGIN BPS TAGGED BLOCK {{{
+#
+# COPYRIGHT:
+#
+# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+#                                          <sales@bestpractical.com>
+#
+# (Except where explicitly superseded by other copyright notices)
+#
+#
+# LICENSE:
+#
+# This work is made available to you under the terms of Version 2 of
+# the GNU General Public License. A copy of that license should have
+# been provided with this software, but in any event can be snarfed
+# from www.gnu.org.
+#
+# This work is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301 or visit their web page on the internet at
+# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+#
+#
+# CONTRIBUTION SUBMISSION POLICY:
+#
+# (The following paragraph is not intended to limit the rights granted
+# to you to modify and distribute this software under the terms of
+# the GNU General Public License and is only of importance to you if
+# you choose to contribute your changes and enhancements to the
+# community by submitting them to Best Practical Solutions, LLC.)
+#
+# By intentionally submitting any modifications, corrections or
+# derivatives to this work, or any other work intended for use with
+# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+# you are the copyright holder for those contributions and you grant
+# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+# royalty-free, perpetual, license to use, copy, create derivative
+# works based on those contributions, and sublicense and distribute
+# those contributions and any derivatives thereof.
+#
+# END BPS TAGGED BLOCK }}}
+use strict;
+use warnings;
+
+use Getopt::Long;
+
+use Cwd qw(abs_path);
+use File::Spec;
+my @orig_argv = @ARGV;
+# Save our path because installers or tests can change cwd
+my $script_path = abs_path($0);
+
+my %args;
+GetOptions(
+    \%args,
+    'install!',
+    'with-MYSQL', 'with-MYSQL5', 'with-MARIADB', 'with-PG', 'with-SQLITE', 'with-ORACLE',
+    'with-FASTCGI', 'with-MODPERL2', 'with-STANDALONE',
+
+    'with-DEVELOPER',
+
+    'with-GPG',
+    'with-GRAPHVIZ',
+    'with-EXTERNALAUTH',
+
+    'with-S3', 'with-DROPBOX',
+    'with-DASHBOARD-CHART-EMAILS',
+
+    'help|h',
+
+    # No-ops, for back-compat
+    'v|verbose', 'with-ICAL', 'with-DASHBOARDS', 'with-USERLOGO',
+);
+
+if ( $args{help} ) {
+    require Pod::Usage;
+    Pod::Usage::pod2usage( { verbose => 2 } );
+    exit;
+}
+
+# Set up defaults
+my %default = (
+    'with-CORE'         => 1,
+    'with-CLI'          => 1,
+    'with-MAILGATE'     => 1,
+    'with-DEVELOPER'    => @RT_DEVELOPER@,
+    'with-GPG'          => @RT_GPG_DEPS@,
+    'with-SMIME'        => @RT_SMIME_DEPS@,
+    'with-GRAPHVIZ'     => @RT_GRAPHVIZ@,
+    'with-EXTERNALAUTH' => @RT_EXTERNALAUTH@,
+    'with-S3'           => (uc(q{@ATTACHMENT_STORE@}) eq 'S3'),
+    'with-DROPBOX'      => (uc(q{@ATTACHMENT_STORE@}) eq 'DROPBOX'),
+    'with-DASHBOARD-CHART-EMAILS' => @RT_DASHBOARD_CHART_EMAILS@,
+);
+
+$default{"with-".uc("@DB_TYPE@")} = 1 unless grep {$args{"with-$_"}} qw/MYSQL MYSQL5 MARIADB PG SQLITE ORACLE/;
+unless (grep {$args{"with-$_"}} qw/FASTCGI MODPERL1 MODPERL2 STANDALONE/) {
+    $default{"with-".uc($_)} = 1 for grep {defined && length} split /,/, "@WEB_HANDLER@"
+}
+
+
+$args{$_} = $default{$_} foreach grep {!exists $args{$_}} keys %default;
+
+$args{'with-EXTERNALAUTH-TESTS'}
+    = $args{'with-EXTERNALAUTH'} && $args{'with-DEVELOPER'};
+
+my %deps = read_deps();
+check_perl_version();
+
+check_users_groups();
+
+test_deps();
+
+if ($args{'install'}) {
+    for my $type ( sort keys %deps ) {
+        for my $module (sort keys %{$deps{$type}}) {
+            # Recheck if the dependency is now satisfied, either
+            # because it was pulled in as part of some other install,
+            # or if it was failing to load because of bad deps.
+            next if test_dep( $module, $deps{$type}{$module} );
+
+            resolve_dep( $module );
+
+            # Delete the module and reload it; if it was previously
+            # installed and got upgraded, this means the new version
+            # will get loaded if some later module goes looking for it
+            # as a prereq.
+            my $m = $module . '.pm';
+            $m =~ s!::!/!g;
+            if ( delete $INC{$m} ) {
+                my $symtab = $module . '::';
+                no strict 'refs';
+                for my $symbol ( keys %{$symtab} ) {
+                    next if substr( $symbol, -2, 2 ) eq '::';
+                    delete $symtab->{$symbol};
+                }
+            }
+
+            # Recheck, to catch install failures and the like
+            delete $deps{$type}{$module} if test_dep( $module, $deps{$type}{$module} );
+        }
+        delete $deps{$type} if not keys %{$deps{$type}};
+    }
+    exec( $script_path, @orig_argv, '--no-install' ) if %deps;
+}
+
+conclude();
+exit 0;
+
+
+sub grey         { return -t STDOUT ? "\e[1;30m$_[0]\e[0m" : $_[0]; }
+sub bright_blue  { return -t STDOUT ? "\e[1;34m$_[0]\e[0m" : $_[0]; }
+sub green        { return -t STDOUT ? "\e[32m$_[0]\e[0m" : $_[0];   }
+sub bright_green { return -t STDOUT ? "\e[1;32m$_[0]\e[0m" : $_[0]; }
+sub bright_red   { return -t STDOUT ? "\e[1;31m$_[0]\e[0m" : $_[0]; }
+
+sub section {
+    my $s = shift;
+    print bright_blue("$s:\n");
+}
+
+sub row {
+    my $msg   = shift;
+    my $test  = shift;
+    my $have  = shift;
+    my $extra = shift;
+
+    my $dots = grey("." x (55 - (length $msg)));
+
+    if ($test) {
+        $have = green($have ? "ok ($have)" : "ok");
+        print "    $msg $dots $have\n";
+    } else {
+        $have = bright_red($have ? "MISSING (have $have)" : "MISSING");
+        print "    $msg $dots $have\n";
+        print "        ". bright_red($extra) . "\n" if $extra;
+    }
+}
+
+sub conclude {
+    print "\n", "-" x 75, "\n\n";
+    unless ( keys %deps ) {
+        print bright_green("All dependencies found.\n\n");
+        return;
+    }
+
+    print bright_red("SOME DEPENDENCIES WERE MISSING:\n\n");
+
+    foreach my $type ( sort keys %deps ) {
+        section("$type dependencies");
+        for my $module (sort keys %{$deps{$type}}) {
+            my $spec = $deps{$type}{$module};
+            my ($ok, $error) = test_dep( $module, $spec );
+            next if $ok;
+            my $msg = $module . ( $spec  && !$error ? " $spec" : "" );
+            my $v = $spec && eval { local $SIG{__WARN__}; $module->VERSION };
+            row( $msg, $ok, $v, $error );
+        }
+        print "\n";
+    }
+
+    print "Perl library path for @PERL@:\n";
+    print "    $_\n" for @INC;
+
+    exit 1;
+}
+
+sub read_deps {
+    my %deps;
+
+    # 'local' would be cleaner, but you can't localize lexicals. :/
+    my @section = ('CORE');
+
+    no warnings 'once';
+    local *requires = sub {
+        $deps{$section[-1]}{$_[0]} = $_[1];
+    };
+    local *on = sub {
+        return unless $_[0] eq 'develop' and $args{'with-DEVELOPER'};
+        push @section, 'DEVELOPER';
+        $_[1]->();
+        pop @section;
+    };
+    local *feature = sub {
+        return unless $args{"with-".uc($_[0])};
+        push @section, uc( $_[0] );
+        $_[-1]->();
+        pop @section;
+    };
+
+    my ($vol, $dir, $path) = File::Spec->splitpath( $script_path );
+    my $ret = do "$dir/../etc/cpanfile";
+    die "Failed to load cpanfile: @{[$@ || $!]}" if not defined $ret and ($@ or $!);
+
+    return %deps;
+}
+
+sub test_deps {
+    foreach my $type ( sort keys %deps ) {
+        section("$type dependencies");
+
+        for my $module (sort keys %{$deps{$type}}) {
+            my $spec = $deps{$type}{$module};
+            my ($ok, $error) = test_dep( $module, $spec );
+            my $msg = $module . ( $spec  && !$error ? " $spec" : "" );
+            my $v = $spec && eval { local $SIG{__WARN__}; $module->VERSION };
+            row( $msg, $ok, $v, $error );
+            delete $deps{$type}{$module} if $ok;
+        }
+        delete $deps{$type} if not keys %{$deps{$type}};
+        print "\n";
+    }
+}
+
+sub test_dep {
+    my ($module, $version_spec) = @_;
+    my @spec_parts = split /\s*,\s*/, defined $version_spec ? $version_spec : '';
+    my @req = grep {defined} map {/>=\s*(\S+)/ ? $1 : undef} @spec_parts;
+    my @avoid = grep {defined} map {/!=\s*(\S+)/ ? $1 : undef} @spec_parts;
+    @req = ('') unless @req;
+
+    no warnings 'deprecated';
+    for my $version (@req) {
+        eval "{ local \$ENV{__WARN__}; use $module $version () }";
+        if ( my $error = $@ ) {
+            return 0 unless wantarray;
+
+            $error =~ s/\n(.*)$//s;
+            $error =~ s/at \(eval \d+\) line \d+\.$//;
+            undef $error if $error =~ /this is only/;
+
+            my $path = $module;
+            $path =~ s{::}{/}g;
+            undef $error
+                if defined $error
+                and $error =~ /^Can't locate $path\.pm in \@INC/;
+
+            return ( 0, $error );
+        }
+    }
+
+    return 1 unless @avoid;
+
+    my $version = $module->VERSION;
+    if ( grep {$version eq $_} @avoid ) {
+        return 0 unless wantarray;
+        return ( 0,
+                 "It's known that there are problems with RT and version '$version' of '$module' module. If it's the latest available version of the module then you have to downgrade manually."
+             );
+    }
+
+    return 1;
+}
+
+sub check_cpan {
+    unless ( eval {require CPAN; 1} ) {
+        print <<END;
+Failed to load CPAN module.
+
+-------- Error ---------
+$@
+------------------------
+
+When we tried to start installing RT's perl dependencies, we were
+unable to load the CPAN client. This module is usually distributed
+with Perl. This usually indicates that your vendor has shipped an
+unconfigured or incorrectly configured CPAN client.  The error above
+may (or may not) give you a hint about what went wrong.
+
+You have several choices about how to install dependencies in
+this situation:
+
+1) Install the package from your vendor that provides the 'CPAN' perl
+   module, then re-run this command.  The package is likely named
+   `perl-CPAN` or similar.
+
+2) Use a different tool to install CPAN dependencies; set the
+   RT_FIX_DEPS_CMD environment to that tool and re-run this command.
+   For instance, using the standalone `cpanm` tool:
+
+       curl -L -o cpanm https://cpanmin.us/
+       chmod +x cpanm
+       RT_FIX_DEPS_CMD=./cpanm make fixdeps
+
+3) Try to update the CPAN client. Download it from:
+   http://search.cpan.org/dist/CPAN , install it, and try again.
+
+4) Install each dependency manually by downloading them one by one from
+   http://search.cpan.org
+
+END
+        exit(1);
+    }
+
+    local @INC = @INC;
+    if ( $ENV{'HOME'} ) {
+        unshift @INC, "$ENV{'HOME'}/.cpan";
+    }
+    my $configured = eval { require CPAN::MyConfig }
+        || eval { require CPAN::Config };
+    unless ($configured) {
+        print <<END;
+You haven't configured the CPAN shell yet.
+Please run `@PERL@ -MCPAN -e shell` to configure it.
+END
+        exit(1);
+    }
+}
+
+
+sub resolve_dep {
+    my $module  = shift;
+
+    print "\nInstall module $module\n";
+
+    my $ext = $ENV{'RT_FIX_DEPS_CMD'} || $ENV{'PERL_PREFER_CPAN_CLIENT'};
+    unless ($ext) {
+        check_cpan();
+
+        my $rv = eval { require CPAN; CPAN::Shell->install($module) };
+        return $rv unless $@;
+    }
+
+    if ( $ext =~ /\%s/ ) {
+        $ext =~ s/\%s/$module/g;    # sprintf( $ext, $module );
+    } else {
+        $ext .= " $module";
+    }
+    print "\t\tcommand: '$ext'\n";
+    return scalar `$ext 1>&2`;
+}
+
+sub check_perl_version {
+    section("perl");
+    my $require = delete $deps{CORE}{perl};
+    eval "require $require";
+    if ($@) {
+        row( $require, 0,  sprintf("%vd", $^V ) );
+        exit(1);
+    } else {
+        row( $require, 1, sprintf( "%vd", $^V ) );
+    }
+    print "\n";
+}
+
+sub check_users_groups {
+    section("users / groups");
+
+    my $fails = 0;
+    my $line = sub {
+        my ($type, $func, $name, $value) = @_;
+        my $id = $func->($value);
+        $fails++ unless defined $id;
+        my $return_type = substr($type,0,1)."id";
+        row("$name $type ($value)", defined $id, defined $id ? "$return_type $id" : undef);
+    };
+    my $group = sub { $line->("group", sub {getgrnam($_[0])}, @_) };
+    my $user  = sub { $line->("user",  sub {getpwnam($_[0])}, @_) };
+
+    $group->( rt   => "@RTGROUP@" );
+    $user->(  bin  => "@BIN_OWNER@" );
+    $user->(  libs => "@LIBS_OWNER@" );
+    $group->( libs => "@LIBS_GROUP@" );
+    $user->(  web  => "@WEB_USER@" );
+    $group->( web  => "@WEB_GROUP@" );
+    print "\n";
+    exit 1 if $fails;
+}
+
+1;
+
+__END__
+
+=head1 NAME
+
+rt-test-dependencies - test RT's dependencies
+
+=head1 SYNOPSIS
+
+    rt-test-dependencies
+    rt-test-dependencies --install
+    rt-test-dependencies --with-mysql --with-fastcgi
+
+=head1 DESCRIPTION
+
+By default, C<rt-test-dependencies> determines whether you have
+installed all the Perl modules RT needs to run.
+
+With B<--install>, it attempts to install any missing dependencies.
+If the C<RT_FIX_DEPS_CMD> environment variable is set, it will be used
+instead of the standard CPAN shell to install any required modules.
+The command will be called with the module to install -- or, if
+C<RT_FIX_DEPS_CMD> contains a C<%s>, will replace the C<%s> with the
+module name before calling the program.
+
+=head1 OPTIONS
+
+=head2 General options
+
+=over
+
+=item B<--install>
+
+Attempt to install missing modules
+
+=back
+
+=head2 Configuration options
+
+=over
+
+=item B<--with-mysql>
+
+=item B<--with-mysql5>
+
+=item B<--with-mariadb>
+
+=item B<--with-pg>
+
+=item B<--with-oracle>
+
+=item B<--with-sqlite>
+
+These configure which backend database to add dependencies for.
+
+
+=item C<--with-standalone>
+
+=item B<--with-fastcgi>
+
+=item B<--with-modperl2>
+
+These configure which interface between the webserver and RT to add
+dependencies for.
+
+
+=item B<--with-developer>
+
+Add dependencies needed to develop RT and run its tests.
+
+
+=item B<--with-gpg>
+
+Add dependencies for GPG encryption and decryption of email.
+
+=item B<--with-graphviz>
+
+Add dependencies for visualizing dependencies between tickets.
+
+=item B<--with-gd>
+
+Add dependencies for creating charts and graphs from search results.
+
+=item B<--with-externalauth>
+
+Add dependencies to integrating with LDAP and other external
+authentication sources.
+
+=item B<--with-s3>
+
+Add dependencies for storing large attachments in Amazon S3.
+
+=item B<--with-dropbox>
+
+Add dependencies for storing large attachments in Dropbox.
+
+=back
+

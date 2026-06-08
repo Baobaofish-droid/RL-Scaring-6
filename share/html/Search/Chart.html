@@ -1,0 +1,419 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%init>
+my $report_class = ( $Class || 'RT::Tickets' )->ReportClass
+    or Abort( loc( "Couldn't find ReportClass for [_1]", $Class || 'RT::Tickets' ) );
+RT::StaticUtil::RequireModule($report_class) or Abort( loc("Couldn't load [_1]", $report_class) );
+my $report = $report_class->new( $session{'CurrentUser'} );
+
+my $default_value = {
+    Query => 'id > 0',
+    GroupBy => [ $report->DefaultGroupBy ],
+    ChartStyle => 'bar+table+sql',
+    ChartFunction => ['COUNT'],
+    ChartOrderBy  => 'label',
+    ChartOrder    => 'ASC',
+    ChartLimit    => '',
+    ChartLimitType => 'Top',
+};
+    
+$m->callback( ARGSRef => \%ARGS, CallbackName => 'Initial' );
+
+my $title = loc( "Grouped search results");
+
+my @search_fields = ( qw(Query GroupBy StackedGroupBy ChartStyle ChartFunction Width Height Class ExtraQueryParams ChartOrderBy ChartOrder ChartLimit ChartLimitType), grep $_, @ExtraQueryParams );
+my %type = (
+    'RT::Tickets'      => 'TicketChart',
+    'RT::Assets'       => 'AssetChart',
+    'RT::Transactions' => 'TicketTransactionChart',
+);
+
+my $saved_search = $m->comp( '/Widgets/SavedSearch:new',
+    SearchType   => $type{$Class},
+    SearchFields => [@search_fields],
+);
+
+my @actions = $m->comp( '/Widgets/SavedSearch:process',
+    args     => \%ARGS,
+    defaults => $default_value,
+    self     => $saved_search,
+);
+
+my %query;
+
+{
+    if ($saved_search->{'CurrentSearch'}->{'Object'}) {
+        foreach my $search_field (@{ $saved_search->{'SearchFields'} }) {
+            $query{$search_field} = $saved_search->{'CurrentSearch'}->{'Object'}->Content->{$search_field};
+        }
+
+        my $content = $saved_search->{'CurrentSearch'}->{'Object'}->Content;
+        if ( my $extra_params = $content->{ExtraQueryParams} ) {
+            $query{ExtraQueryParams} = $extra_params;
+            for my $param ( ref $extra_params eq 'ARRAY' ? @$extra_params : $extra_params ) {
+                $query{$param} = $content->{$param};
+            }
+        }
+    }
+
+    my $current = $session{'CurrentSearchHash'};
+
+    my @session_fields = qw(
+        Query
+        SavedChartSearchId
+        SavedSearchDescription
+        SavedSearchLoad
+        SavedSearchLoadButton
+        SavedSearchOwner
+    );
+
+    for(@session_fields) {
+        $query{$_} = $DECODED_ARGS->{$_} unless defined $query{$_};
+        $query{$_} = $current->{$_} unless defined $query{$_};
+    }
+
+    if ($DECODED_ARGS->{'SavedSearchLoadSubmit'}) {
+        $query{'SavedChartSearchId'} = $DECODED_ARGS->{'SavedSearchLoad'};
+    }
+
+    if ($DECODED_ARGS->{'SavedSearchSave'}) {
+        $query{'SavedChartSearchId'} = $saved_search->{'SearchId'};
+    }
+
+}
+
+foreach (@search_fields) {
+    if ( ref $default_value->{$_} ) {
+        $query{$_} = ref $ARGS{$_} ? $ARGS{$_} : [ $ARGS{$_} ];
+        $query{$_} = $default_value->{$_}
+            unless defined $query{$_} && defined $query{$_}[0];
+    }
+    else {
+        $query{$_} = ref $ARGS{$_} ? $ARGS{$_} : $ARGS{$_};
+        $query{$_} = $default_value->{$_}
+            unless defined $query{$_};
+    }
+}
+
+$m->callback( ARGSRef => \%ARGS, QueryArgsRef => \%query );
+
+</%init>
+<& /Elements/Header, Title => $title &>
+<& /Elements/Tabs, QueryArgs => \%query &>
+<& /Elements/ListActions, actions => \@actions &>
+
+% $m->callback( ARGSRef => \%ARGS, CallbackName => 'BeforeChart' );
+
+<& /Search/Elements/Chart, %ARGS &>
+
+% $m->callback( ARGSRef => \%ARGS, CallbackName => 'AfterChart' );
+
+<div class="chart-meta">
+<div class="chart-type">
+
+<div class="row mt-2">
+  <div class="col-xl-6">
+
+<form method="POST" action="<% RT->Config->Get('WebPath') %>/Search/Chart.html">
+<input type="hidden" class="hidden" name="Query" value="<% $query{Query} %>" />
+<input type="hidden" class="hidden" name="SavedChartSearchId" value="<% $saved_search->{SearchId} || 'new' %>" />
+<input type="hidden" class="hidden" name="Class" value="<% $Class %>" />
+
+% if ( $query{ExtraQueryParams} ) {
+%   for my $input ( ref $query{ExtraQueryParams} eq 'ARRAY' ?  @{$query{ExtraQueryParams}} : $query{ExtraQueryParams} ) {
+<input type="hidden" class="hidden" name="ExtraQueryParams" value="<% $input %>" />
+%       if ( defined $query{$input} ) {
+<input type="hidden" class="hidden" name="<% $input %>" value="<% $query{$input} %>" />
+%       }
+%   }
+% }
+
+    <&| /Widgets/TitleBox, title => loc('Group by'), class => "chart-group-by" &>
+      <&| /Elements/LabeledValue, Label => loc('Group [_1] by', loc(lc $Class->Table)), Class => 'rt-chart-groupby-row' &>
+        <& Elements/SelectGroupBy,
+          Name => 'GroupBy',
+          Query => $query{Query},
+          Default => $query{'GroupBy'}[0],
+          Stacked => $query{'GroupBy'}[0] eq ($query{StackedGroupBy} // '') ? 1 : 0,
+          StackedId => 'StackedGroupBy-1',
+          Class => $Class,
+        &>
+      </&>
+      <&| /Elements/LabeledValue, Label => loc('and then'), Class => 'rt-chart-groupby-row' &>
+        <& Elements/SelectGroupBy,
+          Name => 'GroupBy',
+          Query => $query{Query},
+          Default => $query{'GroupBy'}[1] // q{},
+          ShowEmpty => 1,
+          Stacked => $query{'GroupBy'}[1] && ($query{'GroupBy'}[1] eq ($query{StackedGroupBy} // '')) ? 1 : 0,
+          StackedId => 'StackedGroupBy-2',
+          Class => $Class,
+        &>
+      </&>
+      <&| /Elements/LabeledValue, Label => loc('and then'), Class => 'rt-chart-groupby-row' &>
+        <& Elements/SelectGroupBy,
+          Name => 'GroupBy',
+          Query => $query{Query},
+          Default => $query{'GroupBy'}[2] // q{},
+          ShowEmpty => 1,
+          Stacked => $query{'GroupBy'}[2] && ($query{'GroupBy'}[2] eq ($query{StackedGroupBy} // '')) ? 1 : 0,
+          StackedId => 'StackedGroupBy-3',
+          Class => $Class,
+        &>
+      </&>
+      <&| /Elements/LabeledValue, Label => loc('and then'), Class => 'rt-chart-groupby-row' &>
+        <& Elements/SelectGroupBy,
+          Name => 'GroupBy',
+          Query => $query{Query},
+          Default => $query{'GroupBy'}[3] // q{},
+          ShowEmpty => 1,
+          Stacked => $query{'GroupBy'}[3] && ($query{'GroupBy'}[3] eq ($query{StackedGroupBy} // '')) ? 1 : 0,
+          StackedId => 'StackedGroupBy-4',
+          Class => $Class,
+        &>
+      </&>
+      <&| /Elements/LabeledValue, Label => loc('and then'), Class => 'rt-chart-groupby-row' &>
+        <& Elements/SelectGroupBy,
+          Name => 'GroupBy',
+          Query => $query{Query},
+          Default => $query{'GroupBy'}[4] // q{},
+          ShowEmpty => 1,
+          Stacked => $query{'GroupBy'}[4] && ($query{'GroupBy'}[4] eq ($query{StackedGroupBy} // '')) ? 1 : 0,
+          StackedId => 'StackedGroupBy-5',
+          Class => $Class,
+        &>
+      </&>
+    </&>
+
+    <&| /Widgets/TitleBox, title => loc("Calculate"), class => "chart-calculate" &>
+      <&| /Elements/LabeledValue, Label => loc('Calculate values of'), &>
+        <& Elements/SelectChartFunction, Default => $query{'ChartFunction'}[0], Class => $Class, &>
+      </&>
+      <&| /Elements/LabeledValue, Label => loc('and then'), &>
+        <& Elements/SelectChartFunction, Default => $query{'ChartFunction'}[1] // q{}, ShowEmpty => 1, Class => $Class, &>
+      </&>
+      <&| /Elements/LabeledValue, Label => loc('and then'), &>
+        <& Elements/SelectChartFunction, Default => $query{'ChartFunction'}[2] // q{}, ShowEmpty => 1, Class => $Class, &>
+      </&>
+    </&>
+
+    <&| /Widgets/TitleBox, title => loc('Picture'), class => "chart-picture" &>
+      <input name="ChartStyle" type="hidden" value="<% $query{ChartStyle} %>" />
+      <div class="row gx-2">
+        <div class="col-4">
+          <&| /Elements/LabeledValue, Label => loc("Style"), &>
+            <& Elements/SelectChartType, Default => $query{ChartStyle} =~ /^(pie|bar(?:-stacked)?|line(?:-stacked)?|table)\b/ ? $1 : undef &>
+          </&>
+        </div>
+        <div class="col-4">
+          <&| /Elements/LabeledValue, Label => loc("Width"), &>
+            <div class="input-group mb-3">
+              <input class="form-control" type="text" name="Width" value="<% $query{'Width'} || q{} %>">
+              <span class="input-group-text"><&|/l&>px</&></span>
+            </div>
+          </&>
+        </div>
+        <div class="col-4">
+          <&| /Elements/LabeledValue, Label => loc("Height"), &>
+            <div class="value col-auto">
+              <div class="input-group mb-3">
+                <input class="form-control" type="text" name="Height" value="<% $query{'Height'} || q{} %>">
+                <span class="input-group-text"><&|/l&>px</&></span>
+              </div>
+            </div>
+          </&>
+        </div>
+      </div>
+
+      <div class="include-table form-check">
+        <input type="checkbox" id="ChartStyleIncludeTable" name="ChartStyleIncludeTable" class="form-check-input" <% $query{ChartStyle} =~ /\btable\b/ ? 'checked="checked"' : '' |n %>>
+        <label class="form-check-label" for="ChartStyleIncludeTable"><&|/l&>Include data table</&></label>
+      </div>
+      <div class="include-sql form-check">
+        <input type="checkbox" id="ChartStyleIncludeSQL" name="ChartStyleIncludeSQL" class="form-check-input" <% $query{ChartStyle} =~ /\bsql\b/ ? 'checked="checked"' : '' |n %>>
+        <label class="form-check-label" for="ChartStyleIncludeSQL"><&|/l&>Include TicketSQL query</&></label>
+      </div>
+
+      <div class="row mt-2 sorting gx-2">
+        <h5 class="titlebox-inner-heading mt-2 ms-2">X-Axis</h5>
+      </div>
+      <&| /Elements/LabeledValue, Label => loc("Order by"), LabelTooltip => loc('Value only works for count calculations'), &>
+        <div class="row mt-2 gx-2">
+          <div class="col-6">
+            <select name="ChartOrderBy" class="form-select selectpicker">
+              <option value="label" <% $query{ChartOrderBy} eq 'label' ? 'selected="selected"' : '' |n %>><&|/l&>Label</&></option>
+              <option value="value" <% $query{ChartOrderBy} eq 'value' ? 'selected="selected"' : '' |n %>><&|/l&>Value</&></option>
+            </select>
+          </div>
+          <div class="col-6">
+            <select name="ChartOrder" class="form-select selectpicker">
+              <option value="ASC" <% $query{ChartOrder} eq 'ASC' ? 'selected="selected"' : '' |n %>><&|/l&>Ascending</&></option>
+              <option value="DESC" <% $query{ChartOrder} eq 'DESC' ? 'selected="selected"' : '' |n %>><&|/l&>Descending</&></option>
+            </select>
+          </div>
+        </div>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc("Limit chart to"), &>
+        <div class="row mt-2 align-items-center gx-2">
+          <div class="col-6">
+            <select name="ChartLimitType" class="form-select selectpicker">
+              <option value="Top" <% $query{ChartLimitType} eq 'Top' ? 'selected="selected"' : '' |n %>><&|/l&>Top</&></option>
+              <option value="Bottom" <% $query{ChartLimitType} eq 'Bottom' ? 'selected="selected"' : '' |n %>><&|/l&>Bottom</&></option>
+            </select>
+          </div>
+        <div class="col-4">
+          <input name="ChartLimit" size="3" class="form-control" value="<% $query{ChartLimit} // '' %>" />
+        </div>
+        <div class="col-2">
+        <span class="form-text"><&|/l&>items</&></span>
+        </div>
+      </div>
+      </&>
+    </&>
+
+<script type="text/javascript">
+var updateChartStyle = function() {
+    var val = jQuery(".chart-picture [name=ChartType]").val();
+    if ( val == 'bar' ) {
+        jQuery("span.stacked-group").removeClass('hidden');
+        jQuery("input.stacked-group-checkbox").prop('disabled', false);
+    }
+    else {
+        jQuery("span.stacked-group").addClass('hidden');
+        jQuery("input.stacked-group-checkbox").prop('disabled', true);
+    }
+
+    if ( val != 'table' && jQuery(".chart-picture [name=ChartStyleIncludeTable]").is(':checked') ) {
+        val += '+table';
+    }
+    if ( jQuery(".chart-picture [name=ChartStyleIncludeSQL]").is(':checked') ) {
+        val += '+sql';
+    }
+    jQuery(".chart-picture [name=ChartStyle]").val(val);
+};
+jQuery(".chart-picture [name=ChartType]").change(function(){
+    var t = jQuery(this);
+    t.closest("form").find("[name=Height]").closest(".height").toggle( t.val().match(/\b(?:bar|line)\b/) ? true : false );
+    t.closest("form").find("[name=Width]").closest(".width").toggle( t.val() !== 'table' );
+    t.closest("form .chart-picture").find("div.include-table").toggle( t.val() !== 'table' );
+    updateChartStyle();
+}).change();
+
+jQuery(".chart-picture [name=ChartStyleIncludeTable]").change( updateChartStyle );
+jQuery(".chart-picture [name=ChartStyleIncludeSQL]").change( updateChartStyle );
+jQuery("input.stacked-group-checkbox").change( function() {
+    if ( jQuery(this).is(':checked') ) {
+        jQuery("input.stacked-group-checkbox").not(this).prop('checked', false);
+    }
+});
+
+jQuery("select[name=GroupBy]").change( function() {
+    // "GroupBy-Groups" could be triggered because the they are fully cloned from "GroupBy"
+    if ( jQuery(this).attr('name') == 'GroupBy-Groups' ) {
+        var elem = jQuery(this).closest('.rt-chart-groupby-row').find('select[name=GroupBy]');
+        setTimeout( function () {
+            elem.change();
+        }, 100 ); // give it a moment to prepare "GroupBy" options
+    }
+    else {
+        jQuery(this).closest('.rt-chart-groupby-row').find('input.stacked-group-checkbox').val(jQuery(this).val());
+    }
+});
+
+jQuery( function() {
+    jQuery("select[name=ChartFunction-Groups]").change( function() {
+        var allow_stacked = jQuery(".chart-picture [name=ChartType]").val() == 'bar';
+
+        var value_count;
+        jQuery("select[name=ChartFunction-Groups]").each( function() {
+            if ( jQuery(this).val() ) {
+                value_count++;
+                if ( value_count > 1 || !jQuery(this).val().match(/count/i) ) {
+                    allow_stacked = 0;
+                }
+            }
+        } );
+
+        if ( allow_stacked ) {
+            jQuery("span.stacked-group").removeClass('hidden');
+            jQuery("input.stacked-group-checkbox").prop('disabled', false);
+        }
+        else {
+            jQuery("span.stacked-group").addClass('hidden');
+            jQuery("input.stacked-group-checkbox").prop('disabled', true);
+        }
+    }).change();
+});
+
+</script>
+
+
+    <& /Elements/Submit, Label => loc('Update Chart'), Name => 'Update', FullWidth => 1 &>
+    </form>
+  </div>
+
+  <div class="col-xl-6">
+    <div class="saved-search">
+      <& /Widgets/SavedSearch:show, Class => $Class, %ARGS, Action => 'Chart.html', self => $saved_search, Title => loc('Saved charts'), AllowCopy => 1 &>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+% # This modal has a form, so create it outside the main Build form
+<div class="modal" id="saved-search-options-modal" hx-boost="false">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+  </div>
+</div>
+
+<%ARGS>
+@ExtraQueryParams => ()
+$Class => 'RT::Tickets'
+</%ARGS>

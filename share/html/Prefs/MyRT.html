@@ -1,0 +1,140 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Elements/Header, Title => $title &>
+<& /Elements/Tabs &>
+<& /Elements/ListActions, actions => \@results &>
+
+<&|/Widgets/TitleBox, title => loc('Set Homepage'), bodyclass => "", class => "mx-auto max-width-xl" &>
+<form method="post" name="UpdateDefaultDashboard" class="mx-auto max-width-xl" action="">
+  <div class="row mt-2">
+    <div class="col-12">
+      <& /Elements/SelectDashboard, Dashboards => GetDashboards(), Default => $default_dashboard_id &>
+    </div>
+  </div>
+</form>
+</&>
+
+<&|/Widgets/TitleBox, title => loc('Options'), bodyclass => "", class => "mx-auto max-width-xl" &>
+<div class="row">
+  <div class="col-6 mx-auto">
+    <p class="mt-2">
+      <&|/l&>Set a value here to override the number of rows displayed in each saved search on your homepage. When not set, each saved search uses its own configured rows setting.</&>
+    </p>
+    <form method="post" action="MyRT.html">
+      <&| /Elements/LabeledValue, Label => loc('Saved Search Rows'), ReadOnly => 0 &>
+        <input class="form-control" type="text" name="SummaryRows" value="<% $summary_rows_value %>" placeholder="<% $summary_rows_placeholder %>" />
+      </&>
+      <div class="row mt-3">
+        <div class="col-12 text-end">
+          <input type="submit" class="btn btn-primary" name="UpdateSummaryRows" value="<% loc('Save') %>" />
+% if ( $has_summary_rows_pref ) {
+          <input type="submit" class="btn btn-primary ms-2" name="ResetSummaryRows" value="<% loc('Reset to default') %>" />
+% }
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+</&>
+
+<%INIT>
+my @results;
+my $title = loc("Customize").' '.loc("Homepage");
+my $user = $session{'CurrentUser'}->UserObj;
+
+if ( $ARGS{'UpdateSummaryRows'} ) {
+    unless ( $ARGS{SummaryRows} && int $ARGS{SummaryRows} > 0 ) {
+        push @results, loc ("Illegal '[_1]' preference value.", loc('summary rows'));
+        $ARGS{SummaryRows} = 0;
+    }
+    else {
+        my ($ok, $msg) = $user->SetPreferences( 'SummaryRows', int $ARGS{SummaryRows} );
+        push @results, $ok ? loc('Preferences saved for [_1].', loc('summary rows')) : $msg;
+    }
+}
+elsif ( $ARGS{'ResetSummaryRows'} ) {
+    my ($ok, $msg) = $user->DeletePreferences( 'SummaryRows' );
+    push @results, $ok ? loc('Preferences reset.') : $msg;
+}
+
+# Check if user has a SummaryRows preference set (for showing Reset button)
+my $has_summary_rows_pref = defined $user->Preferences('SummaryRows');
+
+# Only show user's preference in the value field, use placeholder for default
+my $summary_rows_value = $user->Preferences('SummaryRows') // '';
+my $default_summary_rows = RT->Config->Get('DefaultSummaryRows');
+my $summary_rows_placeholder = $default_summary_rows
+    ? loc('Default: [_1]', $default_summary_rows)
+    : loc('Default: [_1]', loc('unset'));
+
+my $default_dashboard_id = $session{'CurrentUser'}->Preferences( DefaultDashboard => 0 );
+
+my ($default) = map { /^DefaultDashboard-(\d+)/ ? $1 : () } keys %ARGS;
+if ( defined $default ) {
+    my ( $ret, $msg );
+    if ( $default ) {
+        ( $ret, $msg ) = $session{CurrentUser}->SetPreferences( 'DefaultDashboard', $default );
+    }
+    else {
+        if ( $default_dashboard_id ) {
+            ( $ret, $msg ) = $session{CurrentUser}->DeletePreferences( 'DefaultDashboard' );
+        }
+        else {
+            $ret = 1;
+        }
+    }
+
+    push @results, $ret ? loc('Preferences saved.') : $msg;
+
+    MaybeRedirectForResults(
+        Actions => \@results,
+        Path    => "/Prefs/MyRT.html",
+    );
+}
+
+</%INIT>

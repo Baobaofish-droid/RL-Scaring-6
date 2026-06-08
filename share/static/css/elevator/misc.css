@@ -1,0 +1,309 @@
+.hide,
+.hidden {
+    display: none !important;
+}
+
+/* Skip links - visible only when focused for keyboard accessibility */
+.skip-link {
+    position: absolute;
+    left: -10000px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    z-index: 10000;
+}
+
+.skip-link:focus {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: auto;
+    height: auto;
+    padding: 0.5rem 1rem;
+    background-color: var(--bs-primary);
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+    z-index: 10000;
+}
+
+/* Hide focus outline on elements that receive programmatic focus.
+   Users don't tab to these elements directly, so the outline isn't needed. */
+#body:focus,
+#main-navigation:focus {
+    outline: none;
+}
+
+.clear {
+    clear: both;
+}
+
+* html .clearfix {
+    height: 1%;
+    /* IE5-6 */
+}
+
+.clearfix {
+    display: inline-block;
+    /* IE7xhtml*/
+}
+
+html[xmlns] .clearfix {
+    /* O */
+    display: block;
+}
+
+.clearfix:after {
+    /* FF, O, etc. */
+    content: ".";
+    display: block;
+    height: 0;
+    clear: both;
+    visibility: hidden;
+}
+
+hr.clear {
+    visibility: hidden;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    font-size: 1px;
+}
+
+.query-stacktrace-toggle {
+    float: right;
+}
+
+/* jQuery UI overrides */
+.ui-widget {
+    font-family: arial, helvetica, sans-serif !important;
+}
+
+textarea.messagebox {
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+.selection-box {
+    min-width: 300px;
+}
+
+.selectowner {
+    max-width: 15.8em;
+    min-width: 10em;
+}
+
+.dashboard-subscription tr.frequency .value input {
+    margin-bottom: 0.75em;
+}
+
+/* infinite history error message */
+
+.error-load-history {
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.error-load-history a {
+    text-decoration: underline !important;
+}
+
+.comment {
+    padding-left: 0.5em;
+}
+
+#comp-Ticket-ShowEmailRecord #header {
+    top: 0em;
+}
+
+#comp-Ticket-ShowEmailRecord #body {
+    margin-left: 1em;
+    margin-top: 1em;
+    overflow: auto;
+}
+
+/* styling for helper text svg images */
+svg.icon-helper {
+    margin-left: 0.2em;
+}
+
+legend {
+    font-size: 1rem;
+}
+
+/* transaction display page */
+h1#transaction-extra-info {
+    font-size: 1.4rem;
+    padding-top: 0.4rem;
+}
+
+/* Remove the default 2 px top/bottom added by Firefox to give more room
+   for the saved search form on the query builder */
+#editquery select option {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.w-15 {
+    width: 15% !important;
+}
+
+ul.ui-autocomplete {
+    z-index: 9999;
+}
+
+figure iframe {
+    margin-top: 2rem;
+}
+
+.modal {
+    border-radius: var(--bs-modal-border-radius);
+}
+
+.modal.search-results-filter {
+    position: absolute;
+    min-width: 300px;
+    width: auto;
+    height: auto;
+    background-color: inherit;
+}
+
+.modal.search-results-filter .modal-dialog.modal-sm form {
+    min-width: 300px;
+}
+
+.modal.search-results-filter .modal-dialog.modal-md form {
+    min-width: 500px;
+}
+
+.modal.search-results-filter .modal-dialog {
+    margin: 0;
+}
+
+.modal.search-results-filter.modal-right .ts-dropdown {
+    right: 0;
+    left: auto;
+}
+
+/* The below fixes modal search filter overflow */
+.modal-open .modal {
+    overflow: visible;
+}
+
+a.close {
+    font-size: 1.75em;
+}
+
+a:hover.close {
+    text-decoration: none;
+}
+
+#hx-boost-spinner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 9999;
+}
+
+.spinner .rt-boost,
+.spinner .rt-placeholder,
+.htmx-indicator {
+    opacity: 0;
+    z-index: -1;
+}
+
+.refreshing .spinner .rt-boost,
+.htmx-request .spinner .rt-placeholder,
+.htmx-request .htmx-indicator {
+    opacity: 1;
+    transition: opacity 1s 2s ease-in;
+    z-index: 9999;
+}
+
+.htmx-request > :not(.spinner),
+.refreshing > :not(#hx-boost-spinner) {
+    opacity: 0.3;
+}
+
+.htmx-widget-content-placeholder {
+    height: 60px;
+}
+
+[data-bs-theme=light] {
+    .error-load-history {
+        background-color: #b32;
+        color: white;
+    }
+
+    .error-load-history a {
+        color: white !important;
+    }
+
+    .comment {
+        color: #999;
+    }
+
+    .modal {
+        background-color: rgb(0, 0, 0, .70);
+    }
+
+    svg.bookmark-selected path {
+        stroke: black;
+        fill: #46B346;
+    }
+
+    svg.icon-helper {
+        color: #666;
+    }
+
+    /* row colouring */
+    .oddline {
+        background-color: rgba(242, 242, 242);
+    }
+
+    /* Do not change background color on click of dropdown items like "Show
+     * full headers" in ticket history */
+    .btn-group.dropdown .dropdown-item:active {
+        background-color: transparent;
+    }
+
+    /* Same for dropdowns in titleboxes */
+    span.right-icon .dropdown-item:active {
+        background-color: transparent;
+    }
+}
+
+[data-bs-theme=dark] {
+    .tooltip {
+        --bs-tooltip-bg: #000;
+        --bs-tooltip-color: var(--bs-body-color);
+    }
+}
+
+/* My Week Styles */
+
+.time-tracking {
+    margin: 10px; /* Some outside spacing since there is no titlebox */
+}
+
+.add-time-negative-margin {
+    margin-top: -68px;
+}
+
+/* User Time Worked report */
+
+.user-time-content {
+    margin: 10px; /* Some outside spacing since there is no titlebox */
+}
+
+/* Alert links with underline */
+.alert a {
+    text-decoration: underline;
+}

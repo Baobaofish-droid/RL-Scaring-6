@@ -1,0 +1,190 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+% if ( !$InRow && @column_classes ) {
+<div class="row">
+% }
+
+% for my $col ( 0 .. $#$Content ) {
+%   if ( @column_classes ) {
+  <div class="<% join ' ', $ExtraColumnClass || (), $column_classes[$col % @column_classes] %>">
+%   }
+
+%   for my $widget ( ref $Content->[$col] eq 'ARRAY' ? @{$Content->[$col]} : $Content->[$col] ) {
+%       my $path;
+%       if ( ref $widget eq 'HASH' && $widget->{Elements}) {
+%           if ( $widget->{Title} || ($widget->{Type} // '') eq 'Section' ) {
+%               $path = '/Elements/ShowWidgetSection';
+%           } else {
+%               $path = '/Elements/ShowWidgetRow';
+%           }
+%       }
+%       elsif ( $Object->isa('RT::Dashboard') ) {
+%           $ARGS{Depth}++;
+%           $m->comp("/Dashboards/Elements/ShowPortlet/$widget->{portlet_type}",
+%               Portlet => $widget,
+%               %ARGS,
+%           );
+%           next;
+%       }
+%       else {
+%           $path = $path_prefix . ( ref $widget ? $widget->{Name} : $widget );
+%       }
+%       ( $path, my $argument ) = split /:/, $path, 2;
+%       $path = '/SelfService' . $path if $Page =~ /^SelfService / && $path =~ /Widgets/;
+%       if ( $m->comp_exists( $path ) ) {
+%           # Disable lazy load for wrapper and mechanize tests
+%           if ( ( ref $widget eq 'HASH' && $widget->{Elements} ) || !RT::Interface::Web->ModernClient() ) {
+%               my %args;
+%               if ( ref $widget eq 'HASH' && $widget->{Elements} ) { # It's a wrapper, just pass necessary arguments
+%                   %args = ( map( { $_ => $ARGS{$_} } @PassArguments ), WidgetConfig => $widget );
+%               } else {
+%                   %args = (
+%                       ref $widget ? map( { $_ eq 'Name' ? () : ( $_ => $widget->{$_} ) } keys %$widget ) : (),
+%                       $ARGSRef ? %$ARGSRef : %$DECODED_ARGS
+%                   );
+%                   $args{Argument} = $argument if defined $argument;
+%                   if ( $Object->isa('RT::Ticket') ) {
+%                       $args{TicketObj} = $Object;
+%                   } elsif ( $Object->isa('RT::Asset') ) {
+%                       $args{AssetObj} = $Object;
+%                   } elsif ( $Object->isa('RT::Queue') ) {
+%                       $args{QueueObj} = $Object;
+%                   } elsif ( $Object->isa('RT::Catalog') ) {
+%                       $args{CatalogObj} = $Object;
+%                   }
+%               }
+                <& $path, %args &>
+%           } else {
+%               my $passed_args = $ARGSRef || $DECODED_ARGS;
+%               my $show_widget = 1; # Default to showing the widget
+%
+%               my $comp = LoadComponent($path);
+%               if ( $comp->method_exists('PreCheck') ) {
+%                   my %precheck_args = (
+%                       Object => $Object,
+%                       Page => $Page,
+%                       ARGSRef => $ARGSRef,
+%                       defined $argument ? ( Argument => $argument ) : (),
+%                       ref $widget ? map( { $_ eq 'Name' ? () : ( $_ => $widget->{$_} ) } keys %$widget ) : (),
+%                   );
+%                   $show_widget = $comp->call_method( 'PreCheck', %precheck_args );
+%               }
+%               my $lazy_load;
+%               if ( $comp->method_exists('LazyLoad') ) {
+%                   my %args = (
+%                       Object => $Object,
+%                       Page => $Page,
+%                       ARGSRef => $ARGSRef,
+%                       defined $argument ? ( Argument => $argument ) : (),
+%                       ref $widget ? map( { $_ eq 'Name' ? () : ( $_ => $widget->{$_} ) } keys %$widget ) : (),
+%                   );
+%                   $lazy_load = $comp->call_method( 'LazyLoad', %args );
+%               }
+%
+%               if ( $show_widget ) {
+%                   my $view_path = $path =~ m{^/SelfService/(.+)} ? "/SelfService/Views/$1" : "/Views$path";
+                    <& /Widgets/HTMXLoadStart,
+                        $Page =~ /Create|Update/ ? 'htmx_post' : 'htmx_get' => RT->Config->Get('WebPath') . $view_path,
+                        htmx_values => {
+                            defined $argument ? ( Argument => $argument ) : (),
+                            ref $widget ? map( { $_ eq 'Name' ? () : ( $_ => $widget->{$_} ) } keys %$widget ) : (),
+                            map { $_ => $passed_args->{$_} } grep { !blessed $passed_args->{$_} } keys %$passed_args,
+                        },
+                        lazy_load   => $lazy_load // $LazyLoad // ( $Page =~ /Create|Update/ ? 0 : 1 ),
+                        class       => 'htmx-load-widget',
+                    &>
+                    <& /Widgets/HTMXLoadEnd &>
+%               }
+%           }
+%       } else {
+%           RT->Logger->warning("Could not find $path");
+%       }
+%   }
+%   if ( @column_classes ) {
+  </div>
+%   }
+% }
+
+% if ( !$InRow && @column_classes ) {
+</div>
+% }
+
+<%INIT>
+if ( !$Content ) {
+    my $config = GetPageLayout(Object => $Object, Page => $Page);
+    if ( ref $config eq 'HASH' ) {
+        $Content = $config->{Content};
+        $Layout ||= $config->{Layout};
+    }
+    else {
+        $Content = $config;
+    }
+}
+
+return unless $Content && @$Content;
+
+my @column_classes = split /\s*,\s*/, $Layout // '';
+
+my $page_type = $Page;
+$page_type =~ s!SelfService !!;
+
+my $path_prefix = $Object->isa('RT::Queue') || $Object->isa('RT::Ticket') ? "/Ticket/Widgets/$page_type/" : ( $Object->isa('RT::Catalog') || $Object->isa('RT::Asset') ? "/Asset/Widgets/$page_type/" : '' );
+</%INIT>
+
+<%ARGS>
+$Elements => undef
+$Content => $Elements
+$Layout => undef
+$Page   => 'Display'
+$InRow  => undef
+$ExtraColumnClass => undef
+$Object => ''
+@PassArguments => qw/Page Object ARGSRef LazyLoad/,
+$ARGSRef => undef
+$LazyLoad => undef
+</%ARGS>

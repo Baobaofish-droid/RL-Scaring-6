@@ -1,0 +1,172 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Elements/Header,
+    Title => $title,
+    ShowBar => $Preview,
+&>
+
+% if ($Preview) {
+<& /Elements/Tabs &>
+% }
+
+<& /Elements/ListActions, actions => \@results &>
+
+% # honor the chosen language for just the dashboard content
+% my $original_handle;
+% if ($SubscriptionObj) {
+%     if ( my $lang = ( $SubscriptionObj->Content || {} )->{Language} ) {
+%         $original_handle = $session{'CurrentUser'}->{'LangHandle'};
+%         $session{'CurrentUser'}->{'LangHandle'} = RT::I18N->get_handle($lang);
+%     }
+% }
+
+% $m->callback(CallbackName => 'BeforeTable', Dashboard => $Dashboard);
+
+<div class="dashboard" id="dashboard-<%$id%>">
+
+% $m->callback(CallbackName => 'BeforePanes', Dashboard => $Dashboard);
+
+<& /Elements/ShowWidgets,
+    Object        => $Dashboard,
+    Layout        => '',
+    Elements      => ( $Dashboard->Content || {} )->{Elements} || [[]],
+    Preview       => $Preview,
+    Dashboard     => $Dashboard,
+    Depth         => 0,
+    HasResults    => $HasResults,
+    PassArguments => [ qw/Object Preview Dashboard Depth HasResults PassArguments SavedSearchSelectedUserName/, defined $subscription_rows && length $subscription_rows ? 'Rows' : () ],
+    SavedSearchSelectedUserName => $m->request_args->{'SavedSearchSelectedUserName'},
+    defined $subscription_rows && length $subscription_rows ? ( Rows => $subscription_rows ) : (),
+&>
+
+% $m->callback(CallbackName => 'AfterPanes', Dashboard => $Dashboard);
+
+</div>
+
+% $m->callback(CallbackName => 'AfterTable', Dashboard => $Dashboard);
+
+% if (!$Preview) {
+
+% if ( $session{ContextUser}->id != $session{CurrentUser}->id ) {
+<p><&|/l, $Dashboard->Name, $session{CurrentUser}->Name &>This is generated from dashboard "[_1]" by the subscription of user "[_2]".</&></p>
+% }
+
+% my $edit = RT->Config->Get('WebPath') . '/Dashboards/Modify.html?id='.$id;
+% my $subscription = RT->Config->Get('WebPath') . '/Dashboards/Subscription.html?id='.$id;
+<p><&|/l, $edit, $subscription &>You <a href="[_1]">may edit this dashboard</a> and <a href="[_2]">your subscription</a> to it in RT.</&></p>
+
+%# We disable autohandlers when mailing (!$Preview) so /Elements/Footer isn't
+%# run for us.  Tidy up the end of the HTML.  We don't use /Elements/Tabs (and
+%# hence PageLayout) so we don't need to close any other tags.
+  </body>
+</html>
+% }
+
+% # restore the original language for anything else on the page
+% if ($original_handle) {
+%     $session{'CurrentUser'}->{'LangHandle'} = $original_handle;
+% }
+<%INIT>
+my @results;
+my $skip_create = 0;
+
+if ( !$Preview ) {
+    $m->notes( 'render-dashboard-email' => 1 );
+}
+
+$m->callback(ARGSRef => \%ARGS,
+             results => \@results,
+             CallbackName => 'Initial',
+             skip_create => \$skip_create);
+
+my $Dashboard = RT::Dashboard->new($session{'CurrentUser'});
+my ($ok, $msg) = $Dashboard->LoadById($id);
+unless ($ok) {
+    RT::Logger->error("Unable to load dashboard with $id: $msg");
+    Abort(loc("Could not load dashboard [_1]", $id), Code => HTTP::Status::HTTP_NOT_FOUND);
+}
+
+Abort('Permission Denied') unless $Dashboard->CurrentUserCanSee;
+
+# Remove in RT 6.2. See Deprecation notice in ProcessQuickCreate.
+my $path = '/Dashboards/' . $Dashboard->id . '/' . $Dashboard->Name;
+unless ( $skip_create ) {
+    push @results, ProcessQuickCreate( Path => $path, ARGSRef => \%ARGS );
+}
+
+my $SubscriptionObj;
+$SubscriptionObj = $Dashboard->Subscription unless $Preview;
+
+# Get Rows from subscription if set (for emailed dashboards)
+my $subscription_rows;
+if ( $SubscriptionObj ) {
+    $subscription_rows = ( $SubscriptionObj->Content || {} )->{Rows};
+}
+
+if ( !$session{ContextUser} ) {
+   RT::Interface::Web::Session::Set(
+       Key   => 'ContextUser',
+       Value => $session{CurrentUser},
+   );
+}
+
+my $title;
+if ( $Dashboard->IsSelfService ) {
+    $title = loc('Self-Service Dashboard');
+}
+else {
+    $title = loc( '[_1] Dashboard', $Dashboard->Name );
+}
+
+</%INIT>
+<%ARGS>
+$id => undef
+$Preview => 1
+$HasResults => undef
+</%ARGS>
+

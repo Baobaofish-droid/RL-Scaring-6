@@ -1,0 +1,414 @@
+
+use strict;
+use warnings;
+use RT::Test;
+use Test::Warn;
+
+my $queue = RT::Test->load_or_create_queue( Name => 'General' );
+ok $queue && $queue->id, 'loaded or created queue';
+
+note 'basic scrips functionality test: create+execute';
+{
+    my $s1 = RT::Scrip->new(RT->SystemUser);
+    my ($val, $msg) = $s1->Create(
+        Queue => $queue->Id,
+        ScripAction => 'User Defined',
+        ScripCondition => 'User Defined',
+        CustomIsApplicableCode => '$self->TicketObj->Subject =~ /fire/? 1 : 0',
+        CustomPrepareCode => 'return 1',
+        CustomCommitCode => '$self->TicketObj->SetPriority("87");',
+        Template => 'Blank'
+    );
+    ok($val,$msg);
+
+    my $ticket = RT::Ticket->new(RT->SystemUser);
+    my ($tv,$ttv,$tm) = $ticket->Create(
+        Queue => $queue->Id,
+        Subject => "hair on fire",
+    );
+    ok($tv, $tm);
+
+    is ($ticket->Priority , '87', "Ticket priority is set right");
+
+    my $ticket2 = RT::Ticket->new(RT->SystemUser);
+    my ($t2v,$t2tv,$t2m) = $ticket2->Create(
+        Queue => $queue->Id,
+        Subject => "hair in water",
+    );
+    ok($t2v, $t2m);
+    isnt ($ticket2->Priority , '87', "Ticket priority is set right");
+}
+
+note 'modify properties of a scrip';
+{
+    my $scrip = RT::Scrip->new($RT::SystemUser);
+    my ( $val, $msg ) = $scrip->Create(
+        ScripCondition => 'On Comment',
+        ScripAction    => 'Notify Owner',
+    );
+    ok( !$val, "missing template: $msg" );
+    ( $val, $msg ) = $scrip->Create(
+        ScripCondition => 'On Comment',
+        ScripAction    => 'Notify Owner',
+        Template       => 'not exists',
+    );
+    ok( !$val, "invalid template: $msg" );
+
+    ( $val, $msg ) = $scrip->Create(
+        ScripAction => 'Notify Owner',
+        Template    => 'Blank',
+    );
+    ok( !$val, "missing condition: $msg" );
+    ( $val, $msg ) = $scrip->Create(
+        ScripCondition => 'not exists',
+        ScripAction    => 'Notify Owner',
+        Template       => 'Blank',
+    );
+    ok( !$val, "invalid condition: $msg" );
+
+    ( $val, $msg ) = $scrip->Create(
+        ScripCondition => 'On Comment',
+        Template       => 'Blank',
+    );
+    ok( !$val, "missing action: $msg" );
+    ( $val, $msg ) = $scrip->Create(
+        ScripCondition => 'On Comment',
+        ScripAction    => 'not exists',
+        Template       => 'Blank',
+    );
+    ok( !$val, "invalid action: $msg" );
+
+    ( $val, $msg ) = $scrip->Create(
+        ScripAction    => 'Notify Owner',
+        ScripCondition => 'On Comment',
+        Template       => 'Blank',
+    );
+    ok( $val, "created scrip: $msg" );
+    $scrip->Load($val);
+    ok( $scrip->id, 'loaded scrip ' . $scrip->id );
+
+    ( $val, $msg ) = $scrip->SetScripCondition();
+    ok( !$val, "missing condition: $msg" );
+    ( $val, $msg ) = $scrip->SetScripCondition('not exists');
+    ok( !$val, "invalid condition: $msg" );
+    ( $val, $msg ) = $scrip->SetScripCondition('On Correspond');
+    ok( $val, "updated condition to 'On Correspond': $msg" );
+
+    ( $val, $msg ) = $scrip->SetScripAction();
+    ok( !$val, "missing action: $msg" );
+    ( $val, $msg ) = $scrip->SetScripAction('not exists');
+    ok( !$val, "invalid action: $msg" );
+    ( $val, $msg ) = $scrip->SetScripAction('Notify AdminCcs');
+    ok( $val, "updated action to 'Notify AdminCcs': $msg" );
+
+    ( $val, $msg ) = $scrip->SetTemplate();
+    ok( !$val, "missing template $msg" );
+    ( $val, $msg ) = $scrip->SetTemplate('not exists');
+    ok( !$val, "invalid template $msg" );
+    ( $val, $msg ) = $scrip->SetTemplate('Forward');
+    ok( $val, "updated template to 'Forward': $msg" );
+
+    ok( $scrip->Delete, 'delete the scrip' );
+}
+
+my $queue_B = RT::Test->load_or_create_queue( Name => 'B' );
+ok $queue_B && $queue_B->id, 'loaded or created queue';
+
+note 'check creation errors vs. templates';
+{
+    my $scrip = RT::Scrip->new(RT->SystemUser);
+    my ($status, $msg) = $scrip->Create(
+        Queue          => $queue->id,
+        ScripAction    => 'User Defined',
+        ScripCondition => 'User Defined',
+        Template       => 'not exist',
+    );
+    ok(!$status, "couldn't create scrip, not existing template");
+
+    ($status, $msg) = $scrip->Create(
+        ScripAction    => 'User Defined',
+        ScripCondition => 'User Defined',
+        Template       => 'not exist',
+    );
+    ok(!$status, "couldn't create scrip, not existing template");
+
+    ($status, $msg) = $scrip->Create(
+        Queue          => $queue->id,
+        ScripAction    => 'User Defined',
+        ScripCondition => 'User Defined',
+        Template       => 54321,
+    );
+    ok(!$status, "couldn't create scrip, not existing template");
+
+    ($status, $msg) = $scrip->Create(
+        ScripAction    => 'User Defined',
+        ScripCondition => 'User Defined',
+        Template       => 54321,
+    );
+    ok(!$status, "couldn't create scrip, not existing template");
+
+    my $template = RT::Template->new( RT->SystemUser );
+    ($status, $msg) = $template->Create( Queue => $queue->id, Name => 'bar' );
+    ok $status, 'created a template';
+
+    ($status, $msg) = $scrip->Create(
+        ScripAction    => 'User Defined',
+        ScripCondition => 'User Defined',
+        Template       => $template->id,
+    );
+    ok(!$status, "couldn't create scrip, wrong template");
+
+    ($status, $msg) = $scrip->Create(
+        Queue          => $queue_B->id,
+        ScripAction    => 'User Defined',
+        ScripCondition => 'User Defined',
+        Template       => $template->id,
+    );
+    ok(!$status, "couldn't create scrip, wrong template");
+}
+
+note 'check applications vs. templates';
+{
+    my $template = RT::Template->new( RT->SystemUser );
+    my ($status, $msg) = $template->Create( Queue => $queue->id, Name => 'foo' );
+    ok $status, 'created a template';
+
+    my $scrip = RT::Scrip->new(RT->SystemUser);
+    ($status, $msg) = $scrip->Create(
+        Queue          => $queue->Id,
+        ScripAction    => 'User Defined',
+        ScripCondition => 'User Defined',
+        Template       => 'foo',
+        CustomIsApplicableCode  => "1;",
+        CustomPrepareCode       => "1;",
+        CustomCommitCode        => "1;",
+    );
+    ok($status, 'created a scrip') or diag "error: $msg";
+    RT::Test->object_scrips_are($scrip, [$queue], [0, $queue_B]);
+
+    ($status, $msg) = $scrip->AddToObject( $queue_B->id );
+    ok(!$status, $msg);
+    RT::Test->object_scrips_are($scrip, [$queue], [0, $queue_B]);
+    my $obj_scrip = RT::ObjectScrip->new( RT->SystemUser );
+    ok($obj_scrip->LoadByCols( Scrip => $scrip->id, ObjectId => $queue->id ));
+    is($obj_scrip->Stage, 'TransactionCreate');
+    is($obj_scrip->FriendlyStage, 'Normal');
+
+    $template = RT::Template->new( RT->SystemUser );
+    ($status, $msg) = $template->Create( Queue => $queue_B->id, Name => 'foo' );
+    ok $status, 'created a template';
+
+    ($status, $msg) = $scrip->AddToObject( $queue_B->id );
+    ok($status, 'added scrip to another queue');
+    RT::Test->object_scrips_are($scrip, [$queue, $queue_B], [0]);
+
+    ($status, $msg) = $scrip->RemoveFromObject( $queue_B->id );
+    ok($status, 'removed scrip from queue');
+
+    ($status, $msg) = $template->Delete;
+    ok $status, 'deleted template foo in queue B';
+
+    ($status, $msg) = $scrip->AddToObject( $queue_B->id );
+    ok(!$status, $msg);
+    RT::Test->object_scrips_are($scrip, [$queue], [0, $queue_B]);
+
+    ($status, $msg) = $template->Create( Queue => 0, Name => 'foo' );
+    ok $status, 'created a global template';
+
+    ($status, $msg) = $scrip->AddToObject( $queue_B->id );
+    ok($status, 'added scrip');
+    RT::Test->object_scrips_are($scrip, [$queue, $queue_B], [0]);
+}
+
+note 'basic check for disabling scrips';
+{
+    my $scrip = RT::Scrip->new(RT->SystemUser);
+    my ($status, $msg) = $scrip->Create(
+        Queue => $queue->id,
+        ScripCondition => 'On Create',
+        ScripAction => 'User Defined',
+        CustomPrepareCode => 'return 1',
+        CustomCommitCode => '$self->TicketObj->SetPriority("87"); return 1',
+        Template => 'Blank'
+    );
+    ok($status, "created scrip");
+    is($scrip->Disabled, 0, "not disabled");
+
+    {
+        my $ticket = RT::Ticket->new(RT->SystemUser);
+        my ($tid, undef, $msg) = $ticket->Create(
+            Queue => $queue->id,
+            Subject => "test",
+        );
+        ok($tid, "created ticket") or diag "error: $msg";
+        is ($ticket->Priority , '87', "Ticket priority is set right");
+    }
+
+    ($status,$msg) = $scrip->SetDisabled(1);
+    is($scrip->Disabled, 1, "disabled");
+
+    {
+        my $ticket = RT::Ticket->new(RT->SystemUser);
+        my ($tid, undef, $msg) = $ticket->Create(
+            Queue => $queue->id,
+            Subject => "test",
+        );
+        ok($tid, "created ticket") or diag "error: $msg";
+        isnt ($ticket->Priority , '87', "Ticket priority is set right");
+    }
+
+    is($scrip->FriendlyStage('TransactionCreate'), 'Normal',
+        'Correct stage wording for TransactionCreate');
+    is($scrip->FriendlyStage('TransactionBatch'), 'Batch',
+        'Correct stage wording for TransactionBatch');
+    RT->Config->Set('UseTransactionBatch', 0);
+    is($scrip->FriendlyStage('TransactionBatch'), 'Batch (disabled by config)',
+        'Correct stage wording for TransactionBatch with UseTransactionBatch disabled');
+    RT->Config->Set('UseTransactionBatch', 1);
+}
+
+note 'check scrip actions name constrains';
+{
+    # Test that we can't create unnamed actions
+    my $action1 = RT::ScripAction->new( RT->SystemUser );
+    my ( $id1, $msg1 ) = $action1->Create( Name => '', ExecModule => 'UserDefined' );
+    is( $msg1, 'empty name' );
+
+    # Create action Foo
+    my $action2 = RT::ScripAction->new( RT->SystemUser );
+    $action2->Create( Name => 'Foo Action', ExecModule => 'UserDefined' );
+
+    my $action3 = RT::ScripAction->new( RT->SystemUser );
+    my ( $id3, $msg3 ) = $action3->Create( Name => 'Foo Action', ExecModule => 'UserDefined' );
+
+    # Make sure we can't create a action with the same name
+    is( $msg3, 'Name in use' );
+}
+
+note 'check scrip conditions name constrains';
+{
+    # Test that we can't create unnamed conditions
+    my $condition1 = RT::ScripCondition->new( RT->SystemUser );
+    my ( $id1, $msg1 ) = $condition1->Create( Name => '', ExecModule => 'UserDefined' );
+    is( $msg1, 'empty name' );
+
+    # Create condition Foo
+    my $condition2 = RT::ScripCondition->new( RT->SystemUser );
+    $condition2->Create( Name => 'Foo Condition', ExecModule => 'UserDefined' );
+
+    my $condition3 = RT::ScripCondition->new( RT->SystemUser );
+    my ( $id3, $msg3 ) = $condition3->Create( Name => 'Foo Condition', ExecModule => 'UserDefined' );
+
+    # Make sure we can't create a condition with the same name
+    is( $msg3, 'Name in use' );
+}
+
+note 'check scrip conditions ExecModule constrains';
+{
+    my $condition = RT::ScripCondition->new( RT->SystemUser );
+    my ( $ret, $msg ) = $condition->Create( Name => 'Module Foo', ExecModule => '' );
+    ok( !$ret );
+    is( $msg, 'Empty module' );
+
+    warning_like {
+        ( $ret, $msg ) = $condition->Create(
+            Name       => 'Module Foo',
+            ExecModule => 'NotExist',
+        );
+    }
+    qr/Require of condition module NotExist failed/;
+
+    ok( !$ret );
+    is( $msg, 'Require of condition module NotExist failed' );
+
+    ( $ret, $msg ) = $condition->Create(
+        Name       => 'Module Foo',
+        ExecModule => 'QueueChange',
+        LookupType => RT::Article->CustomFieldLookupType,
+    );
+    ok( !$ret );
+    is( $msg, 'Condition module QueueChange does not support LookupType RT::Class-RT::Article' );
+}
+
+note 'check scrip actions ExecModule constrains';
+{
+    my $action = RT::ScripAction->new( RT->SystemUser );
+    my ( $ret, $msg ) = $action->Create( Name => 'Module Foo', ExecModule => '' );
+    ok( !$ret );
+    is( $msg, 'Empty module' );
+
+    warning_like {
+        ( $ret, $msg ) = $action->Create(
+            Name       => 'Module Foo',
+            ExecModule => 'NotExist',
+        );
+    }
+    qr/Require of action module NotExist failed/;
+
+    ok( !$ret );
+    is( $msg, 'Require of action module NotExist failed' );
+
+    ( $ret, $msg ) = $action->Create(
+        Name       => 'Module Foo',
+        ExecModule => 'SetPriority',
+        LookupType => RT::Article->CustomFieldLookupType,
+    );
+    ok( !$ret );
+    is( $msg, 'Action module SetPriority does not support LookupType RT::Class-RT::Article' );
+}
+
+note 'TransactionBatch condition receives correct TransactionObj per iteration';
+{
+    # Regression: LoadCondition in IsApplicable spread %args which always
+    # carried batch->[0] as TransactionObj. Two scrips each match a
+    # different field; both must fire when both fields change in one batch.
+
+    # Use a dedicated queue to avoid interference from scrips above.
+    my $batch_queue = RT::Test->load_or_create_queue( Name => 'BatchTest' );
+
+    my $time_estimated_scrip = RT::Scrip->new( RT->SystemUser );
+    my ( $ok, $msg ) = $time_estimated_scrip->Create(
+        Queue                  => $batch_queue->Id,
+        ScripCondition         => 'User Defined',
+        ScripAction            => 'User Defined',
+        CustomIsApplicableCode => 'return ($self->TransactionObj->Field || "") eq "TimeEstimated"',
+        CustomPrepareCode      => 'return 1',
+        CustomCommitCode       => '$self->TicketObj->SetSubject($self->TicketObj->Subject . " [TE]"); return 1;',
+        Template               => 'Blank',
+        Stage                  => 'TransactionBatch',
+    );
+    ok( $ok, "Created TimeEstimated batch scrip: $msg" );
+
+    my $priority_scrip = RT::Scrip->new( RT->SystemUser );
+    ( $ok, $msg ) = $priority_scrip->Create(
+        Queue                  => $batch_queue->Id,
+        ScripCondition         => 'User Defined',
+        ScripAction            => 'User Defined',
+        CustomIsApplicableCode => 'return ($self->TransactionObj->Field || "") eq "Priority"',
+        CustomPrepareCode      => 'return 1',
+        CustomCommitCode       => '$self->TicketObj->SetSubject($self->TicketObj->Subject . " [Prio]"); return 1;',
+        Template               => 'Blank',
+        Stage                  => 'TransactionBatch',
+    );
+    ok( $ok, "Created Priority batch scrip: $msg" );
+
+    my $ticket = RT::Ticket->new( RT->SystemUser );
+    my ($tid) = $ticket->Create( Queue => $batch_queue->Id, Subject => 'test' );
+    ok( $tid, "Created ticket #$tid" );
+    $ticket->ApplyTransactionBatch;
+
+    # Fresh object so RanTransactionBatch guard is clear
+    $ticket = RT::Ticket->new( RT->SystemUser );
+    $ticket->Load($tid);
+    is( $ticket->Subject, 'test', 'Subject starts clean' );
+
+    $ticket->SetTimeEstimated(10);
+    $ticket->SetPriority(50);
+    $ticket->ApplyTransactionBatch;
+
+    $ticket->Load($tid);
+    is( $ticket->Subject,
+        'test [TE] [Prio]',
+        'Both scrips fired in order: condition saw correct TransactionObj per batch iteration'
+      );
+}

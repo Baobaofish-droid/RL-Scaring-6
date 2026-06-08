@@ -1,0 +1,140 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<form name="QuickCreate" hx-post="<% RT->Config->Get('WebPath') %>/Helpers/QuickCreate" hx-target="closest [hx-get]">
+<input type="hidden" class="hidden" name="QuickCreate" value="1" />
+<div>
+  <&| /Elements/LabeledValue, Label => loc("Subject"), LabelFor => "quick-ticket-creation-subject", Class => 'input-row' &>
+    <input id="quick-ticket-creation-subject" type="text" class="form-control" name="Subject" value="<% $args->{Subject} || '' %>" />
+  </&>
+  <div class="row">
+    <div class="col-6">
+      <&| /Elements/LabeledValue, Label => loc("Queue"), LabelFor => "SelectRT::Queue", Class => 'input-row' &>
+        <& /Elements/SelectNewTicketQueue, Name => 'Queue', Default => $args->{Queue}, AutoSubmit => 1 &>
+      </&>
+    </div>
+    <div class="col-6">
+% my $default_owner = $args->{Owner} || $session{'CurrentUser'}->id;
+      <&| /Elements/LabeledValue, Label => loc('Owner'), LabelFor => 'Owner' &>
+        <& /Elements/SelectOwner, Name => 'Owner', QueueObj => $QueueObj, Default => $default_owner, DefaultValue => 0 &>
+      </&>
+    </div>
+  </div>
+% $m->callback( CallbackName => 'BeforeRequestors', QueueObj => $QueueObj, ARGSRef => $args );
+  <&| /Elements/LabeledValue, Label => loc("Requestors"), LabelFor => "Requestors" , Class => 'input-row' &>
+    <& /Elements/EmailInput, Name => 'Requestors', AutocompleteType => 'Principals', Default => $args->{Requestors} || $session{CurrentUser}->EmailAddress, AutocompleteMultiple => 1 &>
+  </&>
+% if ( $CustomFields && $QueueObj && $QueueObj->Id ) {
+  <& /Elements/EditCustomFields,
+      %ARGS,
+      Object => $TicketObj,
+      CategoryObj => $QueueObj,
+      CustomFields => $CustomFields,
+      InTable => 1,
+      ForCreation => 1,
+      DefaultsFromTopArguments => 0,
+  &>
+% }
+  <&| /Elements/LabeledValue, Label => loc("Content"), LabelFor => "quick-ticket-creation-content", Class => 'input-row' &>
+    <textarea id="quick-ticket-creation-content" class="form-control" name="Content" rows="3"><% $args->{Content} || ''%></textarea>
+  </&>
+
+<& /Elements/Submit, Name => 'QuickCreateSubmit', Label => loc('Create'), FullWidth => 1 &>
+</div>
+</form>
+<%init>
+my $args = $session{QuickCreate} || {};
+RT::Interface::Web::Session::Delete(
+    Key => 'QuickCreate',
+);
+
+unless ( keys %$args ) {
+    $args = \%ARGS;
+}
+
+# Empty ticket object for loading custom fields
+my $TicketObj = RT::Ticket->new($session{'CurrentUser'});
+
+my $Queue = $args->{'Queue'} || $ARGS{Queue};
+
+# Use default queue from config site or user prefs if none provided
+unless ( $Queue && length $Queue ) {
+    $Queue = GetDefaultQueue( IncludeFirst => 1 );
+}
+
+my $QueueObj = RT::Queue->new($session{'CurrentUser'});
+my ($ok, $msg) = $QueueObj->Load($Queue);
+
+unless( $ok && $QueueObj->Id ) {
+    RT->Logger->error("In Quick Create, unable to load queue $Queue: $msg");
+}
+
+my $config = RT->Config->Get('QuickCreateCustomFields') || {};
+
+my @custom_field_names;
+foreach my $queue_name ( $QueueObj->__Value('Name'), 'Default' ) {
+    if ( $config->{$queue_name} ) {
+        push @custom_field_names, @{ $config->{$queue_name} };
+        last;
+    }
+}
+
+my $CustomFields;
+
+if (@custom_field_names) {
+    $CustomFields = $QueueObj->TicketCustomFields;
+    $CustomFields->Limit(
+        FIELD           => 'Name',
+        FUNCTION        => 'LOWER(?)',
+        OPERATOR        => 'IN',
+        VALUE           => [ map { lc $_ } @custom_field_names ],
+        CASESENSITIVE   => 1,
+        ENTRYAGGREGATOR => 'AND',
+    );
+}
+
+</%init>

@@ -1,0 +1,124 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<&| /Widgets/TitleBox, title => loc('Basics'), class=>'asset-search-grouping asset-search-basics' &>
+  <div class="row">
+    <div class="col-12 col-md-6">
+        <&| /Elements/LabeledValue, Label => loc('Catalog') &>
+          <& /Asset/Elements/SelectCatalog, Name => 'Catalog', CheckRight => "ShowCatalog",
+            Default => $ARGS{'Catalog'}, AutoSubmit => 1,
+          &>
+        </&>
+    </div>
+
+    <div class="col-12 col-md-6">
+      <&| /Elements/LabeledValue, Label => loc('Status') &>
+        <& /Asset/Elements/SelectStatus, Name => 'Status', Catalogs => { $CatalogObj->id => 1 }, DefaultValue => 1,
+          Default => ($ARGS{'Status'} || '') &>
+      </&>
+    </div>
+  </div>
+
+  <div class="row mt-2">
+    <div class="col-12 col-md-6">
+      <div class="row mt-2">
+        <div class="label col-3 col-md-2"><&|/l&>Name</&></div>
+        <div class="value col-9 col-md-4">
+          <input class="form-control" type="text" id="Name" name="Name" value="<% $ARGS{Name} || ''%>" />
+        </div>
+        <div class="label col-3 col-md-2"><&|/l&>not</&></div>
+        <div class="value col-9 col-md-4">
+          <input class="form-control" type="text" id="!Name" name="!Name" value="<% $ARGS{"!Name"} || ''%>" />
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-6">
+      <div class="row mt-2">
+        <div class="label col-3 col-md-2"><&|/l&>Description</&></div>
+        <div class="value col-9 col-md-4">
+          <input class="form-control" type="text" id="Description" name="Description" value="<% $ARGS{Description} || ''%>" />
+        </div>
+        <div class="label col-3 col-md-2"><&|/l&>not</&></div>
+        <div class="value col-9 col-md-4">
+          <input class="form-control" type="text" id="!Description" name="!Description" value="<% $ARGS{"!Description"} || ''%>" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mt-2">
+    <div class="col-12 col-md-6">
+% my $CFs = RT::CustomFields->new( $session{CurrentUser} );
+% $CFs->LimitToCatalog( $CatalogObj->Id );
+% $CFs->LimitToObjectId(0); # LimitToGlobal but no LookupType restriction
+% $CFs->LimitToGrouping( "RT::Asset" => "Basics" );
+% while (my $cf = $CFs->Next) {
+% my $name = "CF.{" . $cf->Name . "}";
+% my $value  = ref($ARGS{$name}) ? $ARGS{$name}[0] : $ARGS{$name} || '';
+% my $negval = ref($ARGS{"!$name"}) ? $ARGS{"!$name"}[0] : $ARGS{"!$name"} || '';
+      <div class="row mt-2">
+        <div class="label col-3 col-md-2">
+          <% $cf->Name %>
+        </div>
+        <div class="value col-9 col-md-4">
+          <& /Elements/SelectCustomFieldValue, CustomField => $cf, Name => $name, Default => $value &>
+        </div>
+        <div class="label col-3 col-md-2">
+          <&|/l&>not</&>
+        </div>
+        <div class="value col-9 col-md-4">
+          <& /Elements/SelectCustomFieldValue, CustomField => $cf, Name => "!$name", Default => $negval &>
+        </div>
+      </div>
+% }
+    </div>
+  </div>
+</&>
+<%args>
+$CatalogObj => undef
+</%args>

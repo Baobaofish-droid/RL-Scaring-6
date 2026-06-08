@@ -1,0 +1,423 @@
+=encoding utf8
+
+=head1 Articles
+
+Articles are a way of managing stock answers or frequently asked
+questions.  Articles are one or more custom fields whose values can
+be easily inserted into ticket replies or searched and browsed within
+RT.  They are organized into classes and topics.
+
+=head2 UI
+
+The user interface to Articles is available from the Articles menu.  Admin
+functionality can be found under Admin -> Articles.  Once configured, articles
+will become available for searching on the Reply/Comment page on tickets.
+There are L</"Configuration Options"> to make Articles available on ticket
+creation.
+
+For the Articles menu to be visible to your Privileged users, you must grant
+Privileged the ShowArticlesMenu right globally (Admin -> Global -> Group
+Rights).  You may grant the right as selectively as you wish if, for example,
+you only want a certain group of your users to use articles.
+
+=head2 Basics
+
+You will need to make some decisions about how to organize your
+articles.  Articles will be organized into one Class and multiple
+Topics.  They will use Custom Fields to store their article data.
+These Custom Fields can be configured on a Class by Class basis.
+Classes can be made available globally or on a per-Queue basis.
+
+=head2 Organization
+
+=head3 Classes
+
+Classes for articles are similar to RT's queues for tickets.  They can
+be created by going to Admin -> Articles -> Classes -> New Class.  Articles
+are assigned to one Class.  When you create Custom Fields for use with
+Articles, they will be applied Globally or to a Class, like Custom
+Fields are applied to a Queue in RT.
+
+A common use for Articles is to store frequently
+used replies for requestors, like troubleshooting steps or how to sign
+up for a new account. When you insert Article text, you may or may not
+want to include the Article name and summary, in addition to the content,
+when inserting the Article in a reply. You can control this behavior on
+the Class configuration page.
+
+Classes need to be Applied, just like a Custom Field, by using the
+Applies To link on the Modify Class page (Admin ->
+Articles -> Classes, select the class to modify).  You can apply
+them globally or on a queue-by-queue basis.
+
+=head3 Topics
+
+You can also use Topics to organize your Articles.  While editing a
+Class, there is a Topics tab for Class-specific Topics.  You can create
+global Topics from the Global tab under Admin.
+
+When editing Topics, type the name (and optionally description) of the
+Topic, and then click the button at the appropriate location in the
+Topic hierarchy. This should allow you to build a tree of Topics. This
+tree of Topics should show up when creating or modifying articles in
+the class. These can be arbitrarily nested.
+
+Global Topics will be available for all Articles, regardless of their
+Class.  Articles can belong to both global and Class-specific Topics.
+
+Article topics can be set from the Modify screen for the article --
+simply select as many topics as you desire from the list at the bottom
+of the screen.
+
+=head2 Custom Fields
+
+Articles don't have a single "body" section for each
+article. Everything is a custom field (except for name, summary and
+some other basic metadata). So to put information on an
+Article, you need to create a custom field to hold the Article
+body and other data.  When you create these new Custom Fields, set
+the Applies To field to Articles.
+
+Once you've created your Custom Fields, go into your Classes, click
+on Custom Fields, and add the Custom Fields you want to each Class.
+Alternatively, use the Applies To link from each Custom Field.
+
+=head2 Creating Articles
+
+You can create an Article from scratch by going to Articles ->
+Create and then picking which Class to create the Article under.
+The Summary, Description and Custom Fields will all be searchable when
+including an Article and you can control which Custom Fields end up in
+your Ticket from the Class configuration page.
+
+=head3 Extracting an Article
+
+Sometimes activity on a ticket will generate information that would be
+very useful as an article. RT provides an easy way to extract this ticket
+content into an article.
+
+On the ticket display page, the Actions menu contains an "Extract to article"
+option. When you select that action, RT will ask you which Class to create
+your new Article in. Once you select a Class name, the Ticket's transactions
+will be displayed, along with a set of select boxes. For each transaction, you
+can pick which Custom Field that content should be extracted to.
+
+=head2 Including an Article
+
+When replying to or commenting on tickets or creating tickets, there
+is a UI widget that lets you search for and include Articles in
+your reply. When you select an article, the content is inserted into
+the current comment or reply box, but you remain in edit mode so you
+can refine the response before sending.
+
+The Include Article dropdown contains articles from any classes that
+are applied to the queue the ticket is in. When the list of articles
+exceeds the configured L<RT_Config/DropdownMenuLimit>, it
+automatically turns into a search box which allows you to type an
+article name. The search box will help you by auto-completing to
+matching articles as you type.
+
+=head3 Disabling Escaped HTML
+
+By default, when an article is inserted into the ticket message box,
+as a security measure, HTML tags are escaped and only text is displayed.
+For example, RT will display "Me You Greeting Hello world!" from the
+following XML:
+
+  <?xml version="1.0" encoding="UTF-8"?>
+  <note>
+    <to>Me</to>
+    <from>You</from>
+    <heading>Greeting</heading>
+    <body>Hello world!</body>
+  </note>
+
+In cases as above, where the content is harmless and displaying it on the
+ticket might be necessary, there is an option to disable escaping these
+tags per article class. This can be done by unchecking the "Escape HTML"
+box on the Modify Class page. Please note this is potentially unsafe and
+its use should be limited to trusted users.
+
+=head3 Disabling Ticket Linking
+
+When an article is included in a ticket's comment or reply, the article
+is automatically added as a link to the ticket. This means that the article
+will be listed under the Links portlet on ticket display page, and also on
+the article display page. If you use an article many times, it can result
+in a very long list of links on the article page.
+
+To avoid this, you can disable automatic linking globally (via
+L<RT_Config/LinkArticlesOnInclude>) or by class. To disable it on the class
+level, uncheck the "Link article to ticket" option under "When inserting
+articles in this class into emails" on class modify page. Note that
+disabling this feature will only affect future comments/replies on tickets.
+Existing links to articles will remain linked.
+
+=head2 Queue-Specific List of Articles 
+
+You can use Topics to organize a set of Queue-specific Articles.
+Simply create a global Topic called 'Queues' and then create Topics
+under Queues named after each of your Queues.  Within each Queue-named
+Topic, create some Topics and then assign Articles to those
+sub-topics.  This creates a hierarchy like this:
+
+Queues
+\-> General
+    \-> Topic 1
+    \-> Topic 2
+
+If you are replying to a Ticket in the General Queue you will be
+offered a choice of Topic 1 and Topic 2 along with the searching.
+After choosing Topic 1 or Topic 2, you will be given a list of
+relevant articles to choose.
+
+You can also organize articles into separate classes and selectively
+apply classes to the queues they should be used for.
+
+=head2 SelfService Interface
+
+If you want unprivileged users to be able to search for articles
+using the self-service interface, first grant them rights on the
+classes and articles they should see. Then set
+L<$SelfServiceShowArticleSearch|RT_Config/SelfServiceShowArticleSearch>
+to C<1> to enable an article search box at the top of the page
+in self service.
+
+=head2 Article Links Type
+
+RT supports two types of articles: the default Content and Links. Links type
+articles provide a specialized interface for managing collections of URLs
+that can be displayed as formatted link lists on dashboards.
+
+=head3 Prerequisites
+
+Before creating Links type articles, ensure your article class has a
+custom field named "Content" of type "Text" or "HTML". This field stores
+the formatted link data.
+
+=head3 Creating Links Articles
+
+To create a links type article:
+
+=over 4
+
+=item 1.
+
+Navigate to Articles -> Create
+
+=item 2.
+
+Set Type to "Links" which will change the editing interface
+
+=item 3.
+
+Enter links using the dynamic form:
+
+=over 4
+
+=item *
+
+Title: Display text for the link
+
+=item *
+
+Link: URL (can be external or internal RT URLs)
+
+=item *
+
+Description: Optional explanatory text
+
+=back
+
+=back
+
+The interface automatically adds new rows as you focus on the last row,
+allowing entry of unlimited links.
+
+=head3 Dashboard Integration
+
+Links type articles can be added to dashboards:
+
+=over 4
+
+=item 1.
+
+Edit a dashboard and go to the Content tab
+
+=item 2.
+
+Under Available Widgets look for the "Articles" section
+
+=item 3.
+
+Look for "Links: [Article Name]" entries
+
+=item 4.
+
+Add to dashboard - links display as a formatted list
+
+=back
+
+=head3 Example Use Cases
+
+=over 4
+
+=item *
+
+Help desk resource links (knowledge base, vendor sites)
+
+=item *
+
+Project-specific external tools and documentation
+
+=item *
+
+Quick access menus for frequently used RT reports
+
+=item *
+
+Department-specific link collections for staff dashboards
+
+=back
+
+=head3 Technical Notes
+
+Links are stored as HTML in the Content custom field and parsed for editing.
+The Title and Link fields are required; Description is optional.
+
+=head1 Process Articles
+
+Some work managed on tickets in RT will have a defined process or
+set of steps to take when handling the ticket. Articles are a
+convenient place to capture this process and you can then display
+these steps right on the ticket to make it easy for users to follow.
+
+A queue typically can accept multiple types of tickets, and each
+of these might have a different process. For example, you might have
+a queue called "Product Backlog" that tracks work on some software.
+This queue could receive tickets from multiple sources, some
+new feature requests and some bug reports.
+
+You might have a different process to handle these two types
+of tickets. To start, you might categorize these using a custom field
+on the queue called "Ticket Type". Working from this custom field,
+RT provides a way to display a different article for each of the
+options you add for these types.
+
+For example, if the type is set to "Feature Request", the article
+"Feature Request Process" would be displayed for the ticket. If the
+type is changed to "Bug Report", the article "Bug Report Process"
+would be displayed. The next section describes how to configure
+RT to show these process articles.
+
+=head2 Configuring Process Articles
+
+To enable process articles on a queue, first you need to decide which
+field on that queue to use to drive which article is shown. Create a
+new custom field with ticket types or categories if you don't already
+have one.
+
+Next create a new class to contain your process articles. Putting them in
+their own class allows you to manage them separate from other FAQ type
+articles you might have for email replies.
+
+Once you have these two created, set L<%ProcessArticleFields|RT_Config/%ProcessArticleFields>
+with the custom field, and class to use for your queue.
+
+In the class you created, you can now create a new article for each
+entry in your custom field. Once you have them created, you will
+configure the mapping from custom field value to article name using
+the configuration L<%ProcessArticleMapping|RT_Config/%ProcessArticleMapping>.
+
+Article content can then be updated at any time by modifying the source
+article. If you add a new option to your custom field, update the
+configuration to map it to a new article with the corresponding
+process details.
+
+=head1 Article Templates
+
+If you want to be able to add dynamic content to your articles, like showing
+the ticket ID in a response, you can enable the article template feature with
+the L<$EnableArticleTemplates|RT_Config/$EnableArticleTemplates> feature.
+
+Once enabled, you can include code blocks in your article content following
+the same rules as RT's email templates. You can access the current C<$Article>
+and C<$Ticket> objects to automatically include information from the article
+or ticket in the content inserted into the response. For example, to include
+the ticket id, you could include content like this:
+
+    Regarding ticket number { $Ticket->Id }
+
+=head2 Article Templates on Ticket Create
+
+If you use articles on the ticket create page, include a check to make sure
+the ticket object is available. On "create" the ticket doesn't exist yet,
+so you'll want adjust your article content:
+
+    { if ( $Ticket && $Ticket->Id ) {
+        $OUT .= "Regarding ticket number " . $Ticket->Id;
+      }
+    }
+    Below is updated information.
+
+In the above, the C<$Ticket> section will only run on reply or comment for
+an existing ticket. The C<$OUT> variable provides a way to add strings to
+the output inside a code block. See the template documentation for details.
+
+=head2 Templates with HTML Content
+
+You might save an article template with some code and see it changed to
+something like this:
+
+    { if ( $Ticket &amp;&amp; $Ticket-&gt;Id ) {
+
+In that case, first try disabling "scrubbing" for article custom fields.
+This is a security feature in RT that parses HTML content and removes
+content like C<script> tags to prevent compromises from outside content
+like email. You can disable this for just article custom fields with this
+configuration:
+
+    Set(
+        %ScrubCustomFieldOnSave,
+        Default           => 1,
+        'RT::Article'     => 0,
+    );
+
+When doing this, make sure to grant modify permission on articles only to
+trusted users.
+
+=head2 Coding in HTML Article Templates
+
+The HTML editor is very helpful for creating nicely formatted HTML article
+content. However, it can sometimes cause some issues when you include Perl
+code in your templates. If you click the "Source" button in the editor, you
+might see your C<$Ticket-E<gt>Id> appear like this:
+
+    { if ( $Ticket &amp;&amp; $Ticket-&gt;Id ) {
+
+RT will try to convert these automatically and make the code run.
+
+Some special characters can be a challenge because the editor might
+turn them into Unicode. To avoid this issue, CKEditor's automatic text
+transformation feature is disabled in RT by default. If you do want that
+feature on, you will need to be careful when wring Perl code and "undo" the
+automatic change by hitting C<Backspace> or C<Cmd+Z>/C<Ctrl+Z> if needed,
+e.g. when C<-E<gt>> is replaced with C<→>.
+
+For quotation marks, You can also use a Perl feature that allows you to
+use alternate syntax instead. One option is the C<qq> operator with any
+delimiter. The following two statements are identical:
+
+        $OUT .= "Regarding ticket number " . $Ticket->Id;
+
+        $OUT .= qq|Regarding ticket number | . $Ticket->Id;
+
+The latter version uses a "pipe" or vertical line after C<qq> as the start
+and end because it's unlikely to clash with HTML or other Perl code.
+
+=head1 Configuration Options
+
+See the L<Articles section|RT_Config/Articles> on the RT Configuration page
+for configuration options related to Articles features.
+
+=cut

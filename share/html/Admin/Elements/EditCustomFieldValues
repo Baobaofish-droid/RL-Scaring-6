@@ -1,0 +1,166 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+% unless ( $values->Count ) {
+<p><em><&|/l&>(no values)</&></em></p>
+%    return;
+% }
+
+% # we need to allow for an extra col-2 for:
+% # a) Any CF with categories
+% #    The extra space is used to set the category for each value
+% # b) Any CF with the Checkbox render type
+% #    The extra space is used for the "Unchecked"/"Checked" descriptive text
+% # Note that the Combobox CF Type and Checkbox RenderType both preclude having categories,
+% my $description_col_size = ( $CustomField->Type ne 'Combobox' && $Categories ) || $render_type eq "Checkbox" ? 4 : 6;
+
+<div class="row mt-2">
+  <div class="label col-auto">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id='DeleteAll' name="DeleteAll" value="1" onclick="setCheckbox(this, /^Delete-/)" />
+      <label class="form-check-label" for="DeleteAll"></label>
+    </div>
+  </div>
+  <div class="label col-1 text-start">
+    <&|/l&>Sort</&>
+  </div>
+  <div class="label col-3 text-start">
+    <&|/l&>Name</&>
+  </div>
+  <div class="label col-<% $description_col_size %> text-start">
+    <&|/l&>Description</&>
+  </div>
+% if ( $CustomField->Type ne 'Combobox' && $Categories ) {
+    <div class="label categoryheader col-2 text-start">
+      <&|/l&>Category</&>
+    </div>
+% }
+% elsif ( $render_type eq 'Checkbox' ) {
+    <div class="label col-2 text-start">
+      <&|/l&>Checkbox Type</&>
+    </div>
+% }
+</div>
+
+% my $firstValue = 1;
+% while ( my $value = $values->Next ) {
+% my $paramtag = "CustomField-". $CustomField->Id ."-Value-". $value->Id;
+<div class="row mt-2">
+  <div class='col-auto'>
+    <div class="form-check">
+      <input type="checkbox" class="form-check-input" id="Delete-<% $paramtag %>" name="Delete-<% $paramtag %>" />
+        <label class="form-check-label" for="Delete-<% $paramtag %>"></label>
+    </div>
+  </div>
+  <div class="value col-1">
+    <input class="form-control" type="text" size="3" name="<% $paramtag %>-SortOrder" value="<% $value->SortOrder %>" />
+  </div>
+  <div class="value col-3">
+    <input class="form-control" type="text" size="25" name="<% $paramtag %>-Name" value="<% $value->Name %>" />
+  </div>
+  <div class="value col-<% $description_col_size %>">
+    <input class="form-control" type="text" size="45" name="<% $paramtag %>-Description" value="<% $value->Description || '' %>" />
+  </div>
+% if ( $CustomField->Type ne 'Combobox' && $Categories ) {
+  <div class="value col-2">
+% my $selected = $value->Category;
+% $selected = '' unless defined $selected;
+    <select class="editcategory form-select selectpicker" name="<% $paramtag %>-Category" size="1">
+<option value=""<% $selected eq '' ? q[ selected="selected"] : "" |n%>><&|/l&>(no value)</&></option>
+% while (my $Value = $Categories->Next) {
+    <option value="<% $Value->Name %>"<% $selected eq $Value->Name ? q[ selected="selected"] : "" |n%>><% $Value->Name %></option>
+%   }
+    </select>
+  </div>
+% }
+% if ( $render_type eq 'Checkbox' ) {
+  <div class="col-2">
+    <span class="current-value">
+      <% $firstValue ? loc('Unchecked') : loc('Checked') %>
+    </span>
+%   $firstValue = 0;
+  </div>
+% }
+  <div class="col-1">
+    <input type="button" class="delete_custom_field_value btn btn-primary" data-cfv-id="<% $value->id %>" value="<&|/l&>Delete</&>" onclick="delete_custom_field_value(<% $value->id %>)" />
+  </div>
+% $m->callback(CallbackName => 'AfterCustomFieldValueInput', CustomFieldObj => $CustomField, CustomFieldValueObj => $value, ARGSRef => \%ARGS );
+</div>
+% }
+
+<script type="text/javascript">
+function delete_custom_field_value(value_id) {
+    jQuery.post('<% RT->Config->Get('WebPath') %>/Helpers/Admin/EditCustomFieldValue', {
+        action: 'delete',
+        cf_id: <% $CustomField->id %>,
+        value_id: value_id
+    }, function(data) {
+        if ( data.status != 0 ) {
+            jQuery('div.edit_custom_field_values').html(data.html);
+        }
+        else {
+            alert(data.message);
+        }
+    }, 'json')
+}
+</script>
+<%init>
+
+my $values = $CustomField->ValuesObj();
+
+my $BasedOnObj = $CustomField->BasedOnObj;
+my $Categories;
+if ($BasedOnObj and $BasedOnObj->Id) {
+    $Categories = $BasedOnObj->Values;
+}
+
+my $render_type = $CustomField->RenderType;
+
+</%init>
+<%args>
+$CustomField => undef
+</%args>

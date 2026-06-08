@@ -1,0 +1,242 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<form name="EditAboutMe" action="" method="post" enctype="multipart/form-data" <% $UserObj->Id == $session{CurrentUser}->Id ? 'hx-boost="false"' : '' |n %>>
+<input type="hidden" class="hidden" name="id" value="<%$UserObj->Id%>" />
+
+<div class="row mt-2">
+%### Left column ###
+  <div class="boxcontainer col-xl-6">
+
+    <&| /Widgets/TitleBox, title => loc('Identity'), id => "user-prefs-identity" &>
+      <input type="hidden" class="hidden" name="Name" value="<%$UserObj->Name%>" />
+
+      <&| /Elements/LabeledValue, Label => loc("Email") &>
+          <input class="form-control" type="text" name="EmailAddress" value="<%$UserObj->EmailAddress%>" />
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("Real Name") &>
+
+          <input class="form-control" type="text" name="RealName" value="<%$UserObj->RealName%>" />
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("Nickname") &>
+          <input class="form-control" type="text" name="NickName" value="<%$UserObj->NickName || ''%>" />
+           </&>
+      <&| /Elements/LabeledValue, Label => loc("Language") &>
+          <& /Elements/SelectLang, Name => 'Lang', Default => $UserObj->Lang &>
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("Timezone") &>
+          <& /Elements/SelectTimezone, Name => 'Timezone', Default => $UserObj->Timezone &>
+      </&>
+
+      <div class="row mt-2">
+        <& /Elements/EditCustomFields, Object => $UserObj, Grouping => 'Identity' &>
+      </div>
+    </&>
+
+    <&| /Widgets/TitleBox, title => loc('Phone numbers'), id => "user-prefs-phone" &>
+      <&| /Elements/LabeledValue, Label => loc("Residence") &>
+          <input class="form-control" type="tel" name="HomePhone" value="<%$UserObj->HomePhone || ''%>" size="13" />
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("Work") &>
+          <input class="form-control" type="tel" name="WorkPhone" value="<%$UserObj->WorkPhone || ''%>" size="13" />
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("Mobile") &>
+          <input class="form-control" type="tel" name="MobilePhone" value="<%$UserObj->MobilePhone || ''%>" size="13" />
+          </&>
+      <&| /Elements/LabeledValue, Label => loc("Pager") &>
+          <input class="form-control" type="tel" name="PagerPhone" value="<%$UserObj->PagerPhone || ''%>" size="13" />
+      </&>
+      <div class="row mt-2">
+        <div class="label col-12">
+          <& /Elements/EditCustomFields, Object => $UserObj, Grouping => 'Phones' &>
+        </div>
+      </div>
+    </&>
+
+%if ($UserObj->Privileged) {
+%   my $sig = $UserObj->Signature || '';
+%   my $richtext = '';
+    <&| /Widgets/TitleBox, title => loc('Signature'), id => "user-prefs-signature" &>
+      <div class="row mt-2">
+        <div class="col-12">
+%   if (RT->Config->Get('MessageBoxRichText', $session{'CurrentUser'})) {
+%       # allow for a smooth transition from a plain text signature, with or without HTML content, to an HTML signature
+        <input type="text" style="display:none" name="SignatureType" id="SignatureType" value="<%$sig =~ /<.{1,5}>/ ? "text/html" : 'text/plain'%>"/>
+%       $richtext = ' richtext';
+%   }
+            <textarea class="form-control signature<%$richtext%>" cols="80" rows="5" name="Signature" wrap="hard"><%$sig%></textarea>
+        </div>
+      </div>
+    </&>
+% }
+
+% $m->callback( %ARGS, UserObj => $UserObj, CallbackName => 'FormLeftColumn' );
+
+%### End left column ###
+  </div>
+
+%### Right column ###
+  <div class="boxcontainer col-xl-6">
+
+% if ( $session{CurrentUser}->Privileged || RT->Config->Get('SelfServiceShowUserImages') ) {
+  <&| /Widgets/TitleBox, title => loc('Picture'), id => "user-prefs-image" &>
+    <div><p><&|/l, sprintf '%.1fMB', RT->Config->Get('MaxUserImageSize') / 1024**2 &>Upload an image file (under [_1]) to set as your profile picture. For the best display, use an image with the same height and width.</&></p></div>
+% if ( $UserObj->Image ) {
+      <div class="row justify-content-center">
+        <div class="col-auto">
+            <& /Elements/ShowUserImage, User => $UserObj, Class => 'rt-user-image-lg', ShowPopover => 0 &>
+        </div>
+      </div>
+% }
+      <div class="row">
+        <div class="col">
+          <&| /Elements/LabeledValue,
+                Label => loc('Upload a picture'),
+          &>
+            <input type="file" class="form-control" name="UserImage" accept="image/*">
+          </&>
+        </div>
+      </div>
+% if ( $UserObj->Image ) {
+      <div class="row mt-2">
+        <div class="col text-end">
+          <a href="?DeleteImage=1" class="btn btn-primary"><% loc('Delete Image') %></a>
+        </div>
+      </div>
+% }
+% $m->callback( %ARGS, UserObj => $UserObj, CallbackName => 'ImageEnd' );
+  </&>
+% }
+
+    <&| /Widgets/TitleBox, title => loc( $AccessControlName ), id => "user-prefs-access-control" &>
+% if ( $UserObj->__Value('Password') ne '*NO-PASSWORD*' ) {
+<& /Elements/EditPassword,
+    User => $UserObj,
+    Name => $PasswordName,
+&>
+% }
+      <& /Elements/EditCustomFields, Object => $UserObj, Grouping => 'Access control' &>
+    </&>
+
+% my $AdminUser = $session{'CurrentUser'}->HasRight( Object => RT->System, Right => 'AdminUsers' );
+    <&| /Widgets/TitleBox, title => loc('Location'), id => "user-prefs-location" &>
+      <&| /Elements/LabeledValue, Label => loc("Organization") &>
+
+%if ( $AdminUser ) {
+          <input class="form-control" type="text" name="Organization" value="<%$UserObj->Organization || ''%>" />
+%} else {
+          <span class="current-value form-control"><%$UserObj->Organization || ''%></span>
+%}
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("Address1") &>
+          <input class="form-control" type="text" name="Address1" value="<%$UserObj->Address1 || ''%>" />
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("Address2") &>
+          <input class="form-control" type="text" name="Address2" value="<%$UserObj->Address2 || ''%>" />
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("City") &>
+          <input class="form-control" type="text" name="City" value="<%$UserObj->City || ''%>" size="14" />
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("State") &>
+          <input class="form-control" type="text" name="State" value="<%$UserObj->State || ''%>" size="3" />
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("Zip") &>
+          <input class="form-control" type="text" name="Zip" value="<%$UserObj->Zip || ''%>" size="9" />
+      </&>
+      <&| /Elements/LabeledValue, Label => loc("Country") &>
+          <input class="form-control" type="text" name="Country" value="<%$UserObj->Country || ''%>" />
+      </&>
+
+      <div class="row mt-2">
+        <div class="col-12">
+          <& /Elements/EditCustomFields, Object => $UserObj, Grouping => 'Location' &>
+        </div>
+      </div>
+    </&>
+
+    <div class="row mt-2">
+      <div class="col-12">
+        <& /Elements/EditCustomFieldCustomGroupings, Object => $UserObj &>
+      </div>
+    </div>
+
+% $m->callback( %ARGS, UserObj => $UserObj, CallbackName => 'FormRightColumn' );
+
+%### End right column ###
+  </div>
+</div>
+
+<& /Elements/Submit, Label => loc('Save Preferences'), FullWidth => 1 &>
+
+%if ( $AdminUser ) {
+<&| /Widgets/TitleBox, title => loc('Secret authentication token'), id => "user-prefs-feeds" &>
+
+<&|/l&>All iCal feeds embed a secret token which authorizes you.  If the URL for one of your iCal feeds was exposed to the outside world, you can get a new secret, <b>breaking all existing iCal feeds</b>, below.</&>
+
+<a href="#" id="ResetAuthTokenPrompt" style="display: none">
+  <&|/l&>I want to reset my secret token.</&>
+</a>
+<& /Elements/Submit,
+    Label       => loc('Reset secret authentication token'),
+    Name        => "ResetAuthToken",
+    id          => "ResetAuthTokenContainer" &>
+<script>
+    jQuery("#ResetAuthTokenContainer").hide();
+    jQuery("#ResetAuthTokenPrompt").show().click(function(ev){
+        jQuery(this).slideUp();
+        jQuery("#ResetAuthTokenContainer").slideDown();
+        ev.preventDefault();
+    });
+</script>
+</&>
+%}
+
+<%ARGS>
+$UserObj
+$PasswordName
+$AccessControlName => 'Access control'
+</%ARGS>

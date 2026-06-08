@@ -1,0 +1,408 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<& /Admin/Elements/Header,
+    Title => loc("Theme"),
+&>
+<& /Elements/Tabs &>
+<& /Elements/ListActions, actions => \@results &>
+
+<div class="row mt-3">
+
+  <div id="simple-customize" class="col-6">
+    <div id="upload-logo">
+      <h3>Logo</h3>
+      <div class="border border-secondary-subtle rounded">
+        <& /Elements/Logo, id => 'logo-theme-editor', ShowName => 0, Size => 'Large' &>
+      </div>
+      <form method="POST" enctype="multipart/form-data" action="">
+        <div class="row mt-2 mb-2">
+          <div class="col-auto">
+            <label class="form-label" for="logo-upload"><&|/l&>Upload a new logo</&></label>
+            <input type="file" name="logo-upload" class="form-control" id="logo-upload" />
+          </div>
+        </div>
+        <div class="automatic-color-support">
+% if ($valid_image_types) {
+          <&|/l, $valid_image_types &>Your system supports automatic color suggestions for: [_1]</&>
+% }
+        </div>
+        <input class="btn btn-primary mt-1" name="reset_logo" value="<&|/l&>Reset to default RT Logo</&>" type="submit" />
+        <input class="btn btn-primary mt-1" type="submit" value="<&|/l&>Upload</&>" />
+      </form>
+    </div>
+
+    <hr />
+
+    <div id="upload-smalllogo">
+      <h3><&|/l&>Small Logo</&></h3>
+      <div>
+        <&|/l&>A smaller version of the logo that appears on small screens.</&>
+      </div>
+      <div class="border border-secondary-subtle rounded">
+        <& /Elements/Logo, id => 'smalllogo-theme-editor', ShowName => 0, Size => 'Small' &>
+      </div>
+      <form method="POST" enctype="multipart/form-data" action="">
+        <div class="row mt-2 mb-2">
+          <div class="col-auto">
+            <label class="form-label" for="smalllogo-upload"><&|/l&>Upload a new small logo</&></label>
+            <input type="file" name="smalllogo-upload" class="form-control" id="smalllogo-upload" />
+          </div>
+        </div>
+        <input class="btn btn-primary mt-1" name="reset_smalllogo" value="<&|/l&>Reset to default RT Small Logo</&>" type="submit" />
+        <input class="btn btn-primary mt-1" type="submit" value="<&|/l&>Upload</&>" />
+      </form>
+    </div>
+
+    <hr />
+
+    <div id="customize-theme" class="">
+      <h3><&|/l&>Customize the RT theme</&></h3>
+      <&| /Elements/LabeledValue, Label => loc('Select a section') &>
+        <select class="form-select selectpicker" id="section" name="section">
+%       for my $section ( @sections ) {
+              <option value="<% $section->[0] %>"><% $section->[0] %></option>
+%       };
+        </select>
+      </&>
+
+      <&| /Elements/LabeledValue, Label => loc('Select a color for the section') &>
+        <div class="row">
+% if ($colors) {
+          <div class="col btn btn-primary primary-colors">
+%   for (@$colors) {
+%     my $fg = $_->{l} >= $text_threshold ? 'black' : 'white';
+            <button type="button" class="btn btn-primary color-template"
+                    style="background-color: rgb(<% $_->{c} %>); color: <% $fg %>;">
+    <&|/l&>Text</&>
+            </button>
+%   }
+          </div>
+% }
+          <div class="col">
+            <input type="color" class="form-control" id="color-picker" />
+          </div>
+        </div>
+      </&>
+    </div>
+
+  </div>
+
+  <div id="custom-css" class="col-6">
+    <h3><&|/l&>Custom CSS (Advanced)</&></h3>
+
+    <form method="POST" id="custom-css-form" action="">
+      <textarea class="form-control mb-2" rows="20" id="user_css" name="user_css" wrap="off"><% $user_css %></textarea>
+      <input id="try" type="button" class="btn btn-primary" value="<&|/l&>Try</&>" />
+      <input id="reset" type="reset" class="btn btn-primary" value="<&|/l&>Reset</&>" type="submit" />
+      <input name="reset_css" class="btn btn-primary" value="<&|/l&>Reset to default RT Theme</&>" type="submit" />
+      <input class="btn btn-primary" value="<&|/l&>Save</&>" type="submit" />
+    </form>
+  </div>
+</div>
+
+<%ONCE>
+my @sections = (
+    ['Page'         => ['body', 'div#body']],
+    ['Menu bar'     => ['div#quickbar', '#main-navigation #app-nav > li, #main-navigation #app-nav > li > a, #prefs-menu > li, #prefs-menu > li > a, #logo .rtname']],
+    ['Title bar'    => ['div#header']],
+    ['Page title'   => ['div#header h1']],
+    ['Page content' => ['div#body, .body-content-class']],
+    ['Buttons'      => ['input[type="reset"], input[type="submit"], input[class="btn"]']],
+    ['Button hover' => ['input[type="reset"]:hover, input[type="submit"]:hover, input[class="btn"]:hover']],
+    ['Search results' => ['table.collection-as-table th.collection-as-table a']],
+    ['Portlet Text'   => ['.titlebox .titlebox-title .left a, .titlebox .titlebox-title .left']],
+    ['Selected bubble'          => ['.ts-wrapper.multi .ts-control > .item']],
+    ['Selected bubble (active)' => ['.ts-wrapper.multi .ts-control > .item.active']],
+);
+</%ONCE>
+<script type="text/javascript">
+var section_css_mapping = <% JSON(\@sections) |n%>;
+jQuery(function($) {
+    function update_sitecss(text) {
+        if (!text)
+            text = $('#user_css').val();
+        $("style#sitecss").text(text);
+    }
+
+    update_sitecss();
+    $('#try').click(function() {
+        update_sitecss();
+    });
+
+    $('#reset').click(function() {
+        setTimeout(function() {
+            update_sitecss();
+        }, 1000);
+    });
+
+    function change_color(bg, fg) {
+      var section = $('select#section').val();
+
+      var applying = jQuery.grep(section_css_mapping, function(a){ return a[0] == section })[0][1];
+      var css = $('#user_css').val();
+      if (applying) {
+          var specials = new RegExp("([.*+?|()\\[\\]{}\\\\])", "g");
+          for (var name in applying) {
+              var selector = (applying[name]).replace(specials, "\\$1");
+              var rule = new RegExp('^'+selector+'\\s*\{.*?\}', "m");
+              var newcss = "background: " + bg;
+
+              /* Don't set the text color on <body> as it affects too much */
+              if (applying[name] != "body")
+                  newcss += "; color: " + fg;
+
+              /* Kill the border on the quickbar if we're styling it */
+              if (applying[name].match(/quickbar/))
+                  newcss += "; border: none;"
+
+              /* Page title's text color is the selected color */
+              if (applying[name].match(/h1/))
+                  newcss = "color: " + bg;
+
+              if (applying[name].match(/collection-as-table/))
+                  newcss = "color: " + bg;
+
+              if (applying[name].match(/titlebox/))
+                  newcss = "color: " + bg;
+
+              if (applying[name].match(/.ts-wrapper.multi .ts-control .item/))
+                  newcss = "color: " + bg;
+
+              if (applying[name].match(/.ts-wrapper.multi .ts-control .item.active/))
+                  newcss = "color: " + bg;
+
+              /* Nav doesn't need a background, but it wants text color */
+              if (applying[name].match(/#main-navigation/))
+                  newcss = "color: " + fg;
+
+              css = css.replace(rule, applying[name]+" { "+newcss+" }");
+          }
+      }
+      $('#user_css').val(css);
+      update_sitecss(css);
+    }
+
+    document.querySelector('#color-picker').addEventListener('change', function() {
+        const red = parseInt('0x' + this.value.substr(1,2));
+        const green = parseInt('0x' + this.value.substr(3,2));
+        const blue = parseInt('0x' + this.value.substr(5,2));
+        const lightness = (Math.max(red, green, blue) + Math.min(red, green, blue))/2/255;
+        change_color(this.value, lightness > <% $text_threshold %> ? '#000' : '#fff');
+    });
+
+    $('button.color-template').click(function() {
+      change_color($(this).css('background-color'), $(this).css('color'));
+    });
+
+
+    document.getElementById('section').addEventListener('change', event => {
+        const section = event.target.value;
+        const selector = section_css_mapping.filter( a => { return a[0] == section })[0][1][0];
+        const specials = new RegExp("([.*+?|()\\[\\]{}\\\\])", "g");
+        const escaped_selector = selector.replace(specials, "\\$1");
+        const rule = new RegExp('^'+escaped_selector+'\\s*\{\\s*background:\\s*(#\\w+|rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\))', "m");
+        const css = document.getElementById('user_css').value;
+        const result = css.match(rule);
+        if ( result ) {
+            if ( result[2] ) {
+                document.getElementById('color-picker').value =
+                  '#' + result.slice(2, 5).map(num => parseInt(num).toString(16).padStart(2, '0')).join('');
+            }
+            else {
+                document.getElementById('color-picker').value = result[1];
+            }
+        }
+        else {
+            document.getElementById('color-picker').value = '#ffffff';
+        }
+    });
+    document.getElementById('section').dispatchEvent(new Event('change'));
+});
+
+</script>
+<%INIT>
+unless ($session{'CurrentUser'}->HasRight( Object=> RT->System, Right => 'SuperUser')) {
+    Abort(loc('This feature is only available to system administrators.'));
+}
+
+use Digest::MD5 'md5_hex';
+
+my $text_threshold = 0.6;
+my @results;
+my $imgdata;
+
+my $colors;
+require Imager;
+my $valid_image_types = join(", ", map { uc } sort { lc $a cmp lc $b } grep { /png|jpeg|gif/i } keys %Imager::formats);
+
+my $analyze_img = sub {
+    return undef unless $valid_image_types;
+
+    my $imgdata = shift;
+    return undef unless $imgdata;
+
+    # ...but only analyze the image if we have data
+    my $img = Imager->new( data => $imgdata );
+    unless ($img) {
+        # This has to be one damn long line because the loc() needs to be
+        # source parsed correctly.
+        push @results, loc("Automatically suggested theme colors aren't available for your image. This might be because you uploaded an image type that your installed version of Imager doesn't support. Supported types are: [_1]. You can recompile Imager to include support for other image types.", $valid_image_types);
+        return undef;
+    }
+
+    my %colors;
+
+    my @wsamples;
+    my @hsamples;
+    if ($img->getwidth > 200) {
+        @wsamples = map { int($img->getwidth*($_/200)) } (0..199);
+    } else {
+        @wsamples = ( 0 .. $img->getwidth - 1 );
+    }
+    if ($img->getheight > 200) {
+        @hsamples = map { int($img->getheight*($_/200)) } (0..199);
+    } else {
+        @hsamples = ( 0 .. $img->getheight - 1 );
+    }
+
+    require Convert::Color;
+    for my $i (@wsamples) {
+        for my $j (@hsamples) {
+            my @color = ($img->getpixel( x => $i, y => $j )->rgba)[0..2];
+            my $hsl = Convert::Color->new('rgb:'.join(',',map { $_ / 255 } @color))->convert_to('hsl');
+            my $c = join(',',@color);
+            next if $hsl->lightness < 0.1;
+            $colors{$c} ||= { h => $hsl->hue, s => $hsl->saturation, l => $hsl->lightness, cnt => 0, c => $c};
+            $colors{$c}->{cnt}++;
+        }
+    }
+
+    for (values %colors) {
+        $_->{rank} = $_->{s} * $_->{cnt};
+    }
+    my @top6 = grep { defined and $_->{'l'} and $_->{'c'} }
+                    (sort { $b->{rank} <=> $a->{rank} } values %colors)[0..5];
+    return \@top6;
+};
+
+for my $logo_key (qw(Logo SmallLogo)) {
+    if (my $file_hash = _UploadedFile( lc($logo_key).'-upload' )) {
+        $colors = $analyze_img->($file_hash->{LargeContent});
+
+        my $my_system = RT::System->new( $session{CurrentUser} );
+        my ( $id, $msg ) = $my_system->SetAttribute(
+            Name        => "User$logo_key",
+            Description => "User-provided ".lc($logo_key),
+            Content     => {
+                type => $file_hash->{ContentType},
+                data => $file_hash->{LargeContent},
+                hash => md5_hex($file_hash->{LargeContent}),
+                colors => $colors,
+            },
+        );
+        RT->System->Attributes->RedoSearch;
+
+        push @results, loc("Unable to set [_1]: [_2]", "User$logo_key", $msg) unless $id;
+
+        $imgdata = $file_hash->{LargeContent};
+    }
+    elsif ($ARGS{'reset_'.lc($logo_key)}) {
+        RT->System->DeleteAttribute("User$logo_key");
+    }
+    else {
+        if (my $attr = RT->System->FirstAttribute("User$logo_key")) {
+            my $content = $attr->Content;
+            if (ref($content) eq 'HASH') {
+                $imgdata = $content->{data};
+                $colors = $content->{colors};
+                unless ($colors) {
+                    # No colors cached; attempt to generate them
+                    $colors = $content->{colors} = $analyze_img->($content->{data});
+                    if ($content->{colors}) {
+                        # Found colors; update the attribute
+                        RT->System->SetAttribute(
+                            Name => "User$logo_key",
+                            Description => "User-provided ".lc($logo_key),
+                            Content => $content,
+                        );
+                    }
+                }
+            }
+            else {
+                RT->System->DeleteAttribute("User$logo_key");
+            }
+        }
+    }
+}
+
+if ($user_css) {
+    if ($ARGS{'reset_css'}) {
+        RT->System->DeleteAttribute('UserCSS');
+        undef $user_css;
+    }
+    else {
+        my ($id, $msg) = RT->System->SetAttribute( Name => "UserCSS",
+                                                    Description => "User-provided css",
+                                                    Content => $user_css );
+        push @results, loc("Unable to set UserCSS: [_1]", $msg) unless $id;
+    }
+}
+
+if (!$user_css) {
+    my $attr = RT->System->FirstAttribute('UserCSS');
+    $user_css = $attr ? $attr->Content : join(
+        "\n\n" => map {
+            join "\n" => "/* ". $_->[0] ." */",
+                         map { "$_ {}" } @{$_->[1]}
+        } @sections
+    );
+}
+</%INIT>
+<%ARGS>
+$user_css => ''
+</%ARGS>

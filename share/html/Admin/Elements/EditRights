@@ -1,0 +1,217 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<%args>
+$Context
+$Principals
+$AddPrincipal => undef
+</%args>
+<%init>
+# Let callbacks get at principals and context before we do anything with them
+$m->callback( Principals => $Principals, Context => $Context );
+
+# Try to detect if we want to include an add user/group box
+unless ( $AddPrincipal ) {
+    my $last = $Principals->[-1];
+    if ( $last->[0] =~ /Groups/i ) {
+        $AddPrincipal = 'group'; # loc
+    }
+    elsif ( $last->[0] =~ /Users/i ) {
+        $AddPrincipal = 'user'; # loc
+    }
+}
+
+my $anchor = $DECODED_ARGS->{Anchor} || '';
+if ($anchor =~ /AddPrincipal/) {
+    for my $type ("group", "user") {
+        my $record = _ParseACLNewPrincipal($DECODED_ARGS, $type)
+            or next;
+        if ($record->PrincipalId) {
+            $anchor = '#' . $record->PrincipalId;
+            last;
+        }
+    }
+}
+</%init>
+%# Principals is an array of arrays, where the inner arrays are like:
+%#      [ 'Category name' => $CollectionObj => 'DisplayColumn' => 1 ]
+%# The last value is a boolean determining if the value of DisplayColumn
+%# should be loc()-ed before display.
+
+<div class="rights-editor" data-principal-type="<% $AddPrincipal %>">
+  <input type="hidden" value="<% $anchor %>" name="Anchor" />
+  <div class="row mt-2">
+    <div class="col-3">
+      <div class="principal-tabs">
+        <ul class="nav flex-column nav-pills" role="tablist" aria-orientation="vertical">
+<%perl>
+for my $category (@$Principals) {
+    my ($name, $collection, $col, $loc) = @$category;
+</%perl>
+          <li class="category"><% loc($name) %></li>
+<%perl>
+    while ( my $obj = $collection->Next ) {
+        next
+          if $obj->isa( 'RT::Group' )
+          && $obj->_CustomRoleObj
+          && ( $obj->_CustomRoleObj->Disabled
+            || ( $Context->isa( 'RT::Queue' ) && !$obj->_CustomRoleObj->IsAdded( $Context->id ) ) );
+        my $display = ref $col eq 'CODE' ? $col->($obj) : $obj->$col;
+        my $id = "acl-" . $obj->PrincipalId;
+</%perl>
+          <li class="rt-rights-role nav-item mb-1">
+            <a href="#<% $id %>" class="nav-link" id="<% "principal-tab-$id" %>" data-bs-toggle="tab" role="tab" aria-controls="<% $id %>" aria-selected="false">
+              <% $loc ? loc($display) : $display %>
+            </a>
+          </li>
+<%perl>
+    }
+}
+</%perl>
+% if ( $AddPrincipal ) {
+          <li class="add-principal nav-item">
+            <a href="#acl-AddPrincipal" class="nav-link" id="principal-tab-acl-AddPrincipal" data-bs-toggle="tab" role="tab" aria-controls="acl-AddPrincipal">
+              <input placeholder="<&|/l, loc($AddPrincipal) &>Add [_1]</&>" type="text" value="" class="form-control" data-autocomplete="<% lc $AddPrincipal eq 'user' ? 'Users' : 'Groups' %>"
+% if ( lc $AddPrincipal eq 'user' ) {
+                data-autocomplete-return="Name"
+                data-autocomplete-privileged="1"
+% }
+                name="AddPrincipalForRights-<% lc $AddPrincipal %>"
+                id="AddPrincipalForRights-<% lc $AddPrincipal %>" />
+
+% my $type = lc $AddPrincipal eq 'user' ? loc('username') : loc($AddPrincipal);
+              <div class="invalid-feedback hidden"><&|/l, $type &>Invalid [_1]</&></div>
+            </a>
+          </li>
+% }
+        </ul>
+      </div>
+    </div>
+    <div class="col-9">
+      <div class="tab-content">
+<%perl>
+# Now generate our rights panels for each principal
+for my $category (@$Principals) {
+    my ($name, $collection, $col, $loc) = @$category;
+    while ( my $obj = $collection->Next ) {
+        next
+          if $obj->isa( 'RT::Group' )
+          && $obj->_CustomRoleObj
+          && ( $obj->_CustomRoleObj->Disabled
+            || ( $Context->isa( 'RT::Queue' ) && !$obj->_CustomRoleObj->IsAdded( $Context->id ) ) );
+        my $display = ref $col eq 'CODE' ? $col->($obj) : $obj->$col;
+        my $id = "acl-" . $obj->PrincipalId;
+</%perl>
+
+        <div id="<% $id %>" class="tab-pane fade" role="tabpanel" aria-labelledby="<% $id %>-tab">
+          <h3>
+            <% $loc ? loc($display) : $display %>
+<%perl>
+if ($obj->isa('RT::Group') and $obj->Domain eq 'UserDefined') {
+    my $subgroups = $obj->GroupMembersObj( Recursively => 1 );
+    $subgroups->LimitToUserDefinedGroups;
+    $subgroups->Limit( FIELD => 'Name', OPERATOR => '!=', VALUE => $obj->Name, CASESENSITIVE => 0 );
+
+    if ( $subgroups->Count ) {
+        my $inc = join ", ", map $_->Name, @{$subgroups->ItemsArrayRef};
+</%perl>
+            <span class="subgroups"><&|/l, $inc &>includes [_1]</&></span>\
+<%perl>
+    }
+}
+</%perl>
+          </h3>
+          <& EditRightsCategoryTabs, Context => $Context, Principal => $obj, id => $id &>
+        </div>
+<%perl>
+    }
+}
+
+if ( $AddPrincipal ) {
+</%perl>
+        <div id="acl-AddPrincipal" class="tab-pane fade" role="tabpanel" aria-labelledby="acl-AddPrincipal-tab">
+          <h3><&|/l, loc($AddPrincipal) &>Add rights for this [_1]</&></h3>
+          <& EditRightsCategoryTabs, Context => $Context, id => 'acl-AddPrincipal' &>
+        </div>
+% }
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="grant-own-dashboard-rights-modal">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><&|/l&>Grant Dashboard Rights</&></h5>
+        <a href="javascript:void(0)" class="close" data-bs-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </a>
+      </div>
+      <div class="modal-body">
+        <p>
+          <&|/l&>Users need these additional rights to fully customize their own "Homepage":</&>
+        </p>
+        <ul class="list-group-compact">
+%       for my $type ( qw/SavedSearch Dashboard/ ) {
+%         for my $item ( qw/Admin See/ ) {
+            <li class="list-group-item"><% $item %>Own<% $type %></li>
+%         }
+%       }
+
+        </ul>
+        <p>
+          <&|/l&>Grant these rights also? (Make sure to Save Changes)</&>
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal"><&|/l&>No</&></button>
+        <button type="button" class="btn btn-primary" id="grant-own-dashboard-rights-confirm"><&|/l&>Yes</&></button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,189 @@
+%# BEGIN BPS TAGGED BLOCK {{{
+%#
+%# COPYRIGHT:
+%#
+%# This software is Copyright (c) 1996-2026 Best Practical Solutions, LLC
+%#                                          <sales@bestpractical.com>
+%#
+%# (Except where explicitly superseded by other copyright notices)
+%#
+%#
+%# LICENSE:
+%#
+%# This work is made available to you under the terms of Version 2 of
+%# the GNU General Public License. A copy of that license should have
+%# been provided with this software, but in any event can be snarfed
+%# from www.gnu.org.
+%#
+%# This work is distributed in the hope that it will be useful, but
+%# WITHOUT ANY WARRANTY; without even the implied warranty of
+%# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+%# General Public License for more details.
+%#
+%# You should have received a copy of the GNU General Public License
+%# along with this program; if not, write to the Free Software
+%# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+%# 02110-1301 or visit their web page on the internet at
+%# http://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
+%#
+%#
+%# CONTRIBUTION SUBMISSION POLICY:
+%#
+%# (The following paragraph is not intended to limit the rights granted
+%# to you to modify and distribute this software under the terms of
+%# the GNU General Public License and is only of importance to you if
+%# you choose to contribute your changes and enhancements to the
+%# community by submitting them to Best Practical Solutions, LLC.)
+%#
+%# By intentionally submitting any modifications, corrections or
+%# derivatives to this work, or any other work intended for use with
+%# Request Tracker, to Best Practical Solutions, LLC, you confirm that
+%# you are the copyright holder for those contributions and you grant
+%# Best Practical Solutions,  LLC a nonexclusive, worldwide, irrevocable,
+%# royalty-free, perpetual, license to use, copy, create derivative
+%# works based on those contributions, and sublicense and distribute
+%# those contributions and any derivatives thereof.
+%#
+%# END BPS TAGGED BLOCK }}}
+<div class="modal" id="create-auth-token">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><&|/l&>Create authentication token</&></h5>
+        <a id="auth-token-close-modal" href="javascript:void(0)" class="close" data-bs-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </a>
+      </div>
+      <div class="modal-body">
+        <form method="POST" id="createAuthToken" action="">
+          <input type="hidden" name="Owner" value="<% $Owner %>">
+%         if ( $require_password ){
+            <&| /Elements/LabeledValue, Label => loc("[_1]'s current password",$session{'CurrentUser'}->Name()) &>
+              <input class="form-control" type="password" name="Password" autocomplete="off" /></td>
+            </&>
+%         }
+            <&| /Elements/LabeledValue, Label => loc("Description"), LabelTooltip => loc("What is this token for?"), &>
+              <input class="form-control" type="text" name="Description" value="<% $Description %>" />
+            </&>
+
+            <&| /Elements/LabeledValue, &>
+              <div class="form-check">
+                <input type="checkbox" id="ExpiresCheckbox" name="ExpiresCheckbox" class="form-check-input checkbox" value="0" />
+                <label class="form-check-label" for="ExpiresCheckbox"><&|/l&>Set Expiration Date</&></label>
+              </div>
+            </&>
+
+            <&| /Elements/LabeledValue &>
+              <select name="ExpiresSelect" id="ExpiresSelect" class="form-select selectpicker">
+                <option value="1M" ><&|/l, 1 &>[quant,_1,Month,Months]</&></option>
+                <option value="3M"><&|/l, 3 &>[quant,_1,Month,Months]</&></option>
+                <option value="6M"><&|/l, 6 &>[quant,_1,Month,Months]</&></option>
+                <option value="1Y"><&|/l, 1 &>[quant,_1,Year,Years]</&></option>
+                <option value="Custom"><&|/l&>Custom Date</&></option>
+              </select>
+            </&>
+
+            <&| /Elements/LabeledValue &>
+              <& /Elements/SelectDate, Name=>"Expires", id=>"Expires", Default => $Expires, ShowTime => 1 &>
+            </&>
+
+          <& /Elements/Submit, Label => loc("Create"), Name => 'Create', FullWidth => 1, Attributes => q{data-bs-dismiss="modal"} &>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  jQuery("#ExpiresSelect").prop( "disabled", true );
+  jQuery("#Expires").prop( "disabled", true );
+
+  // Expires input needs to be enabled when the form is submitted to read its value
+  jQuery("#createAuthToken").submit(
+    function(e){
+      jQuery("#Expires").prop( "disabled", false );
+      return true;
+    }
+  );
+
+  var onExpiresSelectChange = function() {
+    var expiresSelectVal = jQuery("#ExpiresSelect option:selected").val();
+    var expires          = jQuery("#Expires");
+
+    // make sure expires is enabled so we can change value
+    expires.prop( "disabled", false );
+    if ( jQuery("#ExpiresSelect").prop("disabled") ) {
+      // Expires date options are disabled so Expires should be blank
+      expires.val("");
+    } else {
+      // Expires date options are enabled so determine what we should set
+      // Expires value to based on selected Expires option
+      if ( expiresSelectVal != 'Custom' ) {
+        var date   = new Date();
+        var regexp = /(\d)(\w)/;
+        var match  = expiresSelectVal.match(regexp);
+
+        if ( match != null ) {
+          if ( match[2] == "M" ) {
+            date.setMonth( date.getMonth() + parseInt( match[1] ) );
+          } else {
+            date.setFullYear( date.getFullYear() + parseInt( match[1] ) );
+          }
+          expires.val( date.toISOString().substr(0, 10) + ' 00:00:00' );
+        }
+      }
+    }
+
+    // now enable/disable expires
+    expires.prop( "disabled", expiresSelectVal != "Custom" );
+  };
+
+  jQuery("#ExpiresCheckbox").click(
+    function(){
+      var expiresSelect = jQuery("#ExpiresSelect");
+
+      var disable = true;
+      if ( expiresSelect.prop("disabled") ) {
+        // user is enabling the Expires date options
+        disable = false;
+      } else {
+        // user is disabling the Expires date options
+        disable = true;
+
+        // set back to default value
+        expiresSelect.val("1M");
+
+      }
+
+      expiresSelect.prop( "disabled", disable );
+      if (disable) {
+        expiresSelect.get(0).tomselect?.disable();
+      }
+      else {
+        expiresSelect.get(0).tomselect?.enable();
+      }
+      onExpiresSelectChange();
+    }
+  );
+  jQuery("#ExpiresSelect").change(
+    function(){
+      onExpiresSelectChange();
+    }
+  );
+</script>
+
+<%INIT>
+# Don't require password for systems with some form of federated auth,
+# or if configured to not require a password
+my %res = $session{'CurrentUser'}->CurrentUserRequireToSetPassword();
+my $require_password = 1;
+if ( RT->Config->Get('DisablePasswordForAuthToken') or not $res{'CanSet'}) {
+   $require_password = 0;
+}
+</%INIT>
+
+<%ARGS>
+$Owner
+$Description => ''
+$Expires => ''
+</%ARGS>
